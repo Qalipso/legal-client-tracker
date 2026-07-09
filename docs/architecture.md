@@ -278,7 +278,7 @@ supabase/
                       # plain /start chat_id fallback
   seed.sql
 docs/                 # this file · security · features · setup ·
-                      # notifications · qa/ui-test-plan · onboarding-email-draft ·
+                      # notifications · qa/ui-test-plan ·
                       # brand/ (Elly bot character card + avatar prompts) ·
                       # screenshots/ (README images)
 e2e/                  # Playwright — board.spec.ts + fixtures.ts (localStorage
