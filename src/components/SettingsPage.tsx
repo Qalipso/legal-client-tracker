@@ -462,10 +462,8 @@ export default function SettingsPage({
               {toggle("Смена статуса дела", "notifyOnStatusChanged")}
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              Email-уведомления: доставка через Resend ещё не подключена
-              (нет API-ключа) — переключатель сохраняется, но письма не
-              отправляются, пока администратор не настроит RESEND_API_KEY /
-              RESEND_FROM_EMAIL в секретах Supabase.
+              Email-уведомления доставляются через Resend с верифицированного
+              домена.
             </p>
           </section>
 

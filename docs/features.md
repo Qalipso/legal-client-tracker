@@ -83,7 +83,7 @@
 | Бот отвечает на `/start` — присылает свой chat ID | v0.5.1 | `supabase/functions/telegram-webhook` |
 | Fire-and-forget вызов из UI (не блокирует основной сценарий) | v0.2.1 | `src/lib/notify.ts` |
 | `task.overdue` планировщик (pg_cron, ежедневно 08:00 UTC) | v0.6 | migration 007, `notify_overdue_items()` |
-| Email-канал (получатели, toggle, dispatch через Resend) | v0.6 | migration 008, `notify-telegram/index.ts` — **[Not verified]**: доставка (нет Resend API-ключа) |
+| Email-канал (получатели, toggle, dispatch через Resend, верифицированный домен `shatalov.dev`) | v0.6 | migration 008, `notify-telegram/index.ts` |
 
 ## 7. История и аналитика
 
@@ -117,6 +117,5 @@
 ## 10. Что осознанно НЕ реализовано (см. README → Next steps)
 
 - Team workspace / общий доступ ассистента к делам юриста
-- Реальная доставка email-уведомлений (scaffold готов, нужен Resend API-ключ)
 - Полноценный Google Calendar OAuth-sync (сейчас — односторонний `.ics`-экспорт)
 - Роль/приглашение через UI (сейчас — прямой SQL/Supabase Dashboard)
