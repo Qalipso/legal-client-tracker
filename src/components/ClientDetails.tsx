@@ -7,6 +7,9 @@ import type {
   ClientPriority,
   ClientStatus,
   HistoryType,
+  MatterDeadline,
+  MatterRisk,
+  ReferenceData,
   Task,
 } from "../types/client";
 import { STATUS_LABELS, STATUS_ORDER, STATUS_STYLES } from "../lib/statuses";
@@ -17,6 +20,9 @@ type Props = {
   history: CaseHistoryItem[];
   tasks: Task[];
   attachments: Attachment[];
+  deadlines: MatterDeadline[];
+  risks: MatterRisk[];
+  referenceData: ReferenceData;
   onClose: () => void;
   onStatusChange: (id: string, status: ClientStatus) => void;
   onDelete: (id: string) => void;
@@ -24,7 +30,21 @@ type Props = {
   onAddNote: (clientId: string, text: string) => void;
   onAddTask: (clientId: string, title: string, dueDate?: string) => void;
   onToggleTask: (taskId: string) => void;
-  onAddAttachment: (clientId: string, fileName: string) => void;
+  onAddAttachment: (
+    clientId: string,
+    fileName: string,
+    documentType?: string,
+    documentStatus?: string,
+  ) => void;
+  onAddDeadline: (
+    clientId: string,
+    title: string,
+    dueDate: string,
+    deadlineType?: string,
+  ) => void;
+  onToggleDeadline: (deadlineId: string) => void;
+  onAddRisk: (clientId: string, text: string) => void;
+  onResolveRisk: (riskId: string) => void;
 };
 
 const HISTORY_ICONS: Record<HistoryType, string> = {
@@ -42,6 +62,10 @@ const PRIORITY_LABELS: Record<ClientPriority, string> = {
   medium: "Средний",
   high: "Высокий",
 };
+
+function label(items: { code: string; label: string }[], code?: string) {
+  return items.find((i) => i.code === code)?.label ?? code;
+}
 
 export default function ClientDetails(props: Props) {
   const { client, onClose } = props;
@@ -65,9 +89,11 @@ export default function ClientDetails(props: Props) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
-                {client.name}
+                {client.matterTitle || client.name}
               </h2>
-              <p className="text-sm text-slate-500">{client.phone}</p>
+              <p className="text-sm text-slate-500">
+                {client.matterTitle ? client.name : client.phone}
+              </p>
             </div>
             <div className="flex gap-2">
               <button
@@ -122,6 +148,7 @@ export default function ClientDetails(props: Props) {
           {editing ? (
             <EditForm
               client={client}
+              referenceData={props.referenceData}
               onSave={(patch) => {
                 props.onUpdateClient(client.id, patch);
                 setEditing(false);
@@ -129,12 +156,17 @@ export default function ClientDetails(props: Props) {
               onCancel={() => setEditing(false)}
             />
           ) : (
-            <InfoSection client={client} />
+            <>
+              <MatterSummarySection {...props} />
+              <PartiesSection {...props} />
+            </>
           )}
 
           <TasksSection {...props} />
+          <DeadlinesSection {...props} />
+          <RisksSection {...props} />
           <NoteSection {...props} />
-          <AttachmentsSection {...props} />
+          <DocumentsSection {...props} />
           <HistorySection {...props} />
 
           <button
@@ -150,47 +182,124 @@ export default function ClientDetails(props: Props) {
   );
 }
 
-function InfoSection({ client }: { client: Client }) {
-  const rows: [string, string | undefined][] = [
-    ["Телефон", client.phone],
-    ["Email", client.email],
-    ["Telegram", client.telegram],
-    ["Тип дела", client.caseType],
-    ["Ответственный", client.responsibleLawyer],
-    ["Приоритет", client.priority && PRIORITY_LABELS[client.priority]],
-    ["Комментарий", client.note],
-    ["Добавлен", formatDate(client.createdAt)],
-    ["Обновлён", formatDate(client.updatedAt)],
-  ];
+// "Сводка дела" — matter identity: title, type, subject, stage, key deadline
+function MatterSummarySection({ client, referenceData }: Props) {
+  const hasMatterData =
+    client.matterTitle ||
+    client.matterType ||
+    client.matterSubject ||
+    client.stage ||
+    client.keyDeadline;
+  const deadlineOverdue =
+    client.keyDeadline && new Date(`${client.keyDeadline}T23:59:59`) < new Date();
+
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Основная информация
+        Сводка дела
       </h3>
-      <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-        {rows.map(([label, value]) => (
-          <div key={label} className="contents">
-            <dt className="text-slate-500">{label}</dt>
-            <dd className="text-slate-900">{value || "—"}</dd>
+      {!hasMatterData ? (
+        <p className="mt-2 text-sm text-slate-400">
+          Данные дела не заполнены — нажмите «Редактировать».
+        </p>
+      ) : (
+        <div className="mt-2 flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {client.matterType && (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                {label(referenceData.matterTypes, client.matterType)}
+              </span>
+            )}
+            {client.stage && (
+              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                {label(referenceData.matterStages, client.stage)}
+              </span>
+            )}
+            {client.priority && (
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                Приоритет: {PRIORITY_LABELS[client.priority]}
+              </span>
+            )}
           </div>
-        ))}
-      </dl>
+          {client.matterSubject && (
+            <p className="text-sm text-slate-800">{client.matterSubject}</p>
+          )}
+          {client.keyDeadline && (
+            <p
+              className={`text-sm font-medium ${deadlineOverdue ? "text-red-600" : "text-slate-700"}`}
+            >
+              Контрольный срок: {formatDate(client.keyDeadline)}
+              {deadlineOverdue && " · просрочен"}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// "Стороны" — доверитель (client contacts) + контрагент
+function PartiesSection({ client }: Props) {
+  return (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Стороны
+      </h3>
+      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 p-3">
+          <p className="text-xs font-medium text-slate-400">Доверитель</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {client.name}
+          </p>
+          <p className="text-sm text-slate-600">{client.phone}</p>
+          {client.email && (
+            <p className="text-sm text-slate-600">{client.email}</p>
+          )}
+          {client.telegram && (
+            <p className="text-sm text-slate-600">TG: {client.telegram}</p>
+          )}
+        </div>
+        <div className="rounded-lg border border-slate-200 p-3">
+          <p className="text-xs font-medium text-slate-400">Контрагент</p>
+          <p className="mt-1 text-sm text-slate-800">
+            {client.counterparty || "—"}
+          </p>
+        </div>
+      </div>
+      {(client.responsibleLawyer || client.note) && (
+        <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
+          {client.responsibleLawyer && (
+            <>
+              <dt className="text-slate-500">Ответственный</dt>
+              <dd className="text-slate-900">{client.responsibleLawyer}</dd>
+            </>
+          )}
+          {client.note && (
+            <>
+              <dt className="text-slate-500">Комментарий</dt>
+              <dd className="text-slate-900">{client.note}</dd>
+            </>
+          )}
+        </dl>
+      )}
     </section>
   );
 }
 
 function EditForm({
   client,
+  referenceData,
   onSave,
   onCancel,
 }: {
   client: Client;
+  referenceData: ReferenceData;
   onSave: (patch: ClientPatch) => void;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState<Required<Omit<ClientPatch, "priority">> & {
-    priority: ClientPriority | "";
-  }>({
+  const [form, setForm] = useState<
+    Required<Omit<ClientPatch, "priority">> & { priority: ClientPriority | "" }
+  >({
     name: client.name,
     phone: client.phone,
     email: client.email ?? "",
@@ -199,6 +308,12 @@ function EditForm({
     caseType: client.caseType ?? "",
     responsibleLawyer: client.responsibleLawyer ?? "",
     priority: client.priority ?? "",
+    matterTitle: client.matterTitle ?? "",
+    matterType: client.matterType ?? "",
+    matterSubject: client.matterSubject ?? "",
+    stage: client.stage ?? "",
+    counterparty: client.counterparty ?? "",
+    keyDeadline: client.keyDeadline ?? "",
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -220,6 +335,34 @@ function EditForm({
     </div>
   );
 
+  const selectField = (
+    labelText: string,
+    key: keyof typeof form,
+    options: { code: string; label: string }[],
+  ) => (
+    <div>
+      <label
+        htmlFor={`edit-${key}`}
+        className="mb-1 block text-sm font-medium text-slate-700"
+      >
+        {labelText}
+      </label>
+      <select
+        id={`edit-${key}`}
+        value={form[key]}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
+      >
+        <option value="">Не задан</option>
+        {options.map((o) => (
+          <option key={o.code} value={o.code}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return setError("Имя не может быть пустым");
@@ -234,46 +377,69 @@ function EditForm({
       caseType: form.caseType.trim() || undefined,
       responsibleLawyer: form.responsibleLawyer.trim() || undefined,
       priority: form.priority || undefined,
+      matterTitle: form.matterTitle.trim() || undefined,
+      matterType: form.matterType || undefined,
+      matterSubject: form.matterSubject.trim() || undefined,
+      stage: form.stage || undefined,
+      counterparty: form.counterparty.trim() || undefined,
+      keyDeadline: form.keyDeadline || undefined,
     });
   }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Редактирование клиента
+        Сводка дела
       </h3>
-      {field("Имя клиента *", "name")}
-      {field("Телефон *", "phone", "tel")}
-      {field("Email", "email", "email")}
-      {field("Telegram", "telegram")}
-      {field("Тип дела", "caseType")}
-      {field("Ответственный юрист", "responsibleLawyer")}
-      <div>
-        <label
-          htmlFor="edit-priority"
-          className="mb-1 block text-sm font-medium text-slate-700"
-        >
-          Приоритет
-        </label>
-        <select
-          id="edit-priority"
-          value={form.priority}
-          onChange={(e) =>
-            setForm((f) => ({
-              ...f,
-              priority: e.target.value as ClientPriority | "",
-            }))
-          }
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
-        >
-          <option value="">Не задан</option>
-          {(Object.keys(PRIORITY_LABELS) as ClientPriority[]).map((p) => (
-            <option key={p} value={p}>
-              {PRIORITY_LABELS[p]}
-            </option>
-          ))}
-        </select>
+      {field("Название дела", "matterTitle")}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {selectField("Тип дела", "matterType", referenceData.matterTypes)}
+        {selectField("Стадия", "stage", referenceData.matterStages)}
       </div>
+      {field("Предмет дела", "matterSubject")}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {field("Контрольный срок", "keyDeadline", "date")}
+        <div>
+          <label
+            htmlFor="edit-priority"
+            className="mb-1 block text-sm font-medium text-slate-700"
+          >
+            Приоритет
+          </label>
+          <select
+            id="edit-priority"
+            value={form.priority}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                priority: e.target.value as ClientPriority | "",
+              }))
+            }
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
+          >
+            <option value="">Не задан</option>
+            {(Object.keys(PRIORITY_LABELS) as ClientPriority[]).map((p) => (
+              <option key={p} value={p}>
+                {PRIORITY_LABELS[p]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <h3 className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Стороны
+      </h3>
+      {field("Имя доверителя *", "name")}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {field("Телефон *", "phone", "tel")}
+        {field("Контрагент", "counterparty")}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {field("Email", "email", "email")}
+        {field("Telegram", "telegram")}
+      </div>
+      {field("Ответственный юрист", "responsibleLawyer")}
       {field("Комментарий", "note")}
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex gap-2">
@@ -295,12 +461,7 @@ function EditForm({
   );
 }
 
-function TasksSection({
-  client,
-  tasks,
-  onAddTask,
-  onToggleTask,
-}: Props) {
+function TasksSection({ client, tasks, onAddTask, onToggleTask }: Props) {
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDue, setTaskDue] = useState("");
   const clientTasks = tasks
@@ -385,6 +546,183 @@ function TasksSection({
   );
 }
 
+// "Контрольные сроки" — typed legal deadlines, distinct from ad-hoc tasks above
+function DeadlinesSection({
+  client,
+  deadlines,
+  referenceData,
+  onAddDeadline,
+  onToggleDeadline,
+}: Props) {
+  const [title, setTitle] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [type, setType] = useState("");
+  const clientDeadlines = deadlines
+    .filter((d) => d.clientId === client.id)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !dueDate) return;
+    onAddDeadline(client.id, title.trim(), dueDate, type || undefined);
+    setTitle("");
+    setDueDate("");
+    setType("");
+  }
+
+  return (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Контрольные сроки
+      </h3>
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {clientDeadlines.length === 0 && (
+          <li className="text-sm text-slate-400">Нет контрольных сроков</li>
+        )}
+        {clientDeadlines.map((d) => {
+          const overdue = !d.completed && new Date(`${d.dueDate}T23:59:59`) < new Date();
+          return (
+            <li key={d.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={d.completed}
+                onChange={() => onToggleDeadline(d.id)}
+                aria-label={`Срок: ${d.title}`}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              <span
+                className={
+                  d.completed ? "text-slate-400 line-through" : "text-slate-800"
+                }
+              >
+                {d.title}
+                {d.deadlineType && (
+                  <span className="ml-1.5 text-xs text-slate-400">
+                    ({label(referenceData.deadlineTypes, d.deadlineType)})
+                  </span>
+                )}
+              </span>
+              <span
+                className={`ml-auto whitespace-nowrap text-xs ${
+                  overdue ? "font-medium text-red-600" : "text-slate-400"
+                }`}
+              >
+                до {formatDate(d.dueDate)}
+                {overdue && " · просрочено"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <form onSubmit={submit} className="mt-3 flex flex-col gap-2">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Подать апелляцию…"
+            aria-label="Новый контрольный срок"
+            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+          />
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            aria-label="Дата срока"
+            required
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+          />
+        </div>
+        <div className="flex gap-2">
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            aria-label="Тип срока"
+            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+          >
+            <option value="">Тип срока (необязательно)</option>
+            {referenceData.deadlineTypes.map((t) => (
+              <option key={t.code} value={t.code}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            +
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+// "Риски / открытые вопросы"
+function RisksSection({ client, risks, onAddRisk, onResolveRisk }: Props) {
+  const [text, setText] = useState("");
+  const clientRisks = risks
+    .filter((r) => r.clientId === client.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    onAddRisk(client.id, text.trim());
+    setText("");
+  }
+
+  return (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Риски / открытые вопросы
+      </h3>
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {clientRisks.length === 0 && (
+          <li className="text-sm text-slate-400">Нет открытых вопросов</li>
+        )}
+        {clientRisks.map((r) => (
+          <li key={r.id} className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={r.isResolved}
+              onChange={() => onResolveRisk(r.id)}
+              aria-label={`Риск: ${r.text}`}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300"
+            />
+            <span
+              className={
+                r.isResolved
+                  ? "text-slate-400 line-through"
+                  : "text-slate-800"
+              }
+            >
+              {r.text}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <form onSubmit={submit} className="mt-3 flex gap-2">
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Контрагент может оспорить условие…"
+          aria-label="Новый риск"
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+        />
+        <button
+          type="submit"
+          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+        >
+          +
+        </button>
+      </form>
+    </section>
+  );
+}
+
 function NoteSection({ client, onAddNote }: Props) {
   const [note, setNote] = useState("");
 
@@ -420,7 +758,14 @@ function NoteSection({ client, onAddNote }: Props) {
   );
 }
 
-function AttachmentsSection({ client, attachments, onAddAttachment }: Props) {
+function DocumentsSection({
+  client,
+  attachments,
+  referenceData,
+  onAddAttachment,
+}: Props) {
+  const [docType, setDocType] = useState("");
+  const [docStatus, setDocStatus] = useState("");
   const clientAttachments = attachments.filter(
     (a) => a.clientId === client.id,
   );
@@ -429,31 +774,78 @@ function AttachmentsSection({ client, attachments, onAddAttachment }: Props) {
       <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
         Документы
       </h3>
-      <ul className="mt-2 flex flex-col gap-1">
+      <ul className="mt-2 flex flex-col gap-1.5">
         {clientAttachments.length === 0 && (
           <li className="text-sm text-slate-400">Нет документов</li>
         )}
         {clientAttachments.map((a) => (
           <li key={a.id} className="flex items-center justify-between text-sm">
-            <span className="text-slate-800">📎 {a.fileName}</span>
+            <span className="text-slate-800">
+              📎 {a.fileName}
+              {a.documentType && (
+                <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                  {label(referenceData.documentTypes, a.documentType)}
+                </span>
+              )}
+              {a.documentStatus && (
+                <span className="ml-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                  {label(referenceData.documentStatuses, a.documentStatus)}
+                </span>
+              )}
+            </span>
             <span className="text-xs text-slate-400">
               {formatDate(a.uploadedAt)}
             </span>
           </li>
         ))}
       </ul>
-      <label className="mt-2 inline-block cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-        Прикрепить файл
-        <input
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onAddAttachment(client.id, file.name);
-            e.target.value = "";
-          }}
-        />
-      </label>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <select
+          value={docType}
+          onChange={(e) => setDocType(e.target.value)}
+          aria-label="Тип документа"
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+        >
+          <option value="">Тип документа</option>
+          {referenceData.documentTypes.map((t) => (
+            <option key={t.code} value={t.code}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={docStatus}
+          onChange={(e) => setDocStatus(e.target.value)}
+          aria-label="Статус документа"
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+        >
+          <option value="">Статус документа</option>
+          {referenceData.documentStatuses.map((s) => (
+            <option key={s.code} value={s.code}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <label className="inline-block cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+          Прикрепить файл
+          <input
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                onAddAttachment(
+                  client.id,
+                  file.name,
+                  docType || undefined,
+                  docStatus || undefined,
+                );
+              }
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
       <p className="mt-1 text-[11px] text-slate-400">
         Прототип: сохраняется только имя файла, без содержимого.
       </p>

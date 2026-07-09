@@ -5,6 +5,8 @@ import type {
   ClientPatch,
   ClientStatus,
   HistoryType,
+  MatterDeadline,
+  MatterRisk,
   NewClientInput,
   NotificationEvent,
   NotificationRecipient,
@@ -12,6 +14,7 @@ import type {
 } from "../../types/client";
 import type { DataProvider } from "./types";
 import { STATUS_LABELS } from "../statuses";
+import { DEMO_REFERENCE_DATA } from "../matterReference";
 
 const STORAGE_KEY = "legal-client-tracker:clients";
 const SETTINGS_KEY = "legal-client-tracker:settings";
@@ -21,6 +24,8 @@ const emptyData: AppData = {
   history: [],
   tasks: [],
   attachments: [],
+  deadlines: [],
+  risks: [],
 };
 
 const seedClients: Client[] = [
@@ -132,7 +137,29 @@ const seedData: AppData = {
       id: "a-seed-2",
       clientId: "seed-2",
       fileName: "contract-draft.docx",
+      documentType: "contract",
+      documentStatus: "under_review",
       uploadedAt: "2026-07-05T10:20:00.000Z",
+    },
+  ],
+  deadlines: [
+    {
+      id: "d-seed-3",
+      clientId: "seed-3",
+      deadlineType: "claim_response",
+      title: "Ответ на претензию",
+      dueDate: "2026-07-08",
+      completed: false,
+      createdAt: "2026-07-05T16:45:00.000Z",
+    },
+  ],
+  risks: [
+    {
+      id: "r-seed-2",
+      clientId: "seed-2",
+      text: "Контрагент может оспорить пункт о неустойке",
+      isResolved: false,
+      createdAt: "2026-07-05T10:05:00.000Z",
     },
   ],
 };
@@ -173,7 +200,14 @@ function migrate(parsed: unknown): AppData {
         : V2_TYPE_MAP[oldType];
     return { ...h, type: mapped };
   });
-  return { ...emptyData, ...data, history };
+  // v3 → v4: matter model adds deadlines/risks arrays, missing on old saves
+  return {
+    ...emptyData,
+    ...data,
+    history,
+    deadlines: data.deadlines ?? [],
+    risks: data.risks ?? [],
+  };
 }
 
 function load(): AppData {
@@ -445,7 +479,12 @@ export const localStorageProvider: DataProvider = {
       ),
     ),
 
-  addAttachment: (clientId: string, fileName: string) =>
+  addAttachment: (
+    clientId: string,
+    fileName: string,
+    documentType?: string,
+    documentStatus?: string,
+  ) =>
     mutate((data) => ({
       ...data,
       attachments: [
@@ -454,6 +493,8 @@ export const localStorageProvider: DataProvider = {
           id: crypto.randomUUID(),
           clientId,
           fileName,
+          documentType,
+          documentStatus,
           uploadedAt: new Date().toISOString(),
         },
       ],
@@ -461,5 +502,95 @@ export const localStorageProvider: DataProvider = {
         historyItem(clientId, "attachment_added", `Документ: ${fileName}`),
         ...data.history,
       ],
+    })).then(visible),
+
+  getReferenceData: () => Promise.resolve(DEMO_REFERENCE_DATA),
+
+  createDeadline: (
+    clientId: string,
+    title: string,
+    dueDate: string,
+    deadlineType?: string,
+  ) =>
+    mutate((data) => {
+      const deadline: MatterDeadline = {
+        id: crypto.randomUUID(),
+        clientId,
+        deadlineType,
+        title: title.trim(),
+        dueDate,
+        completed: false,
+        createdAt: new Date().toISOString(),
+      };
+      return {
+        ...data,
+        deadlines: [...data.deadlines, deadline],
+        history: [
+          historyItem(clientId, "task_created", `Срок: ${title} — ${dueDate}`),
+          ...data.history,
+        ],
+      };
+    }).then(visible),
+
+  toggleDeadline: (deadlineId: string) =>
+    mutate((data) => {
+      const deadline = data.deadlines.find((d) => d.id === deadlineId);
+      if (!deadline) return data;
+      const completed = !deadline.completed;
+      return {
+        ...data,
+        deadlines: data.deadlines.map((d) =>
+          d.id === deadlineId
+            ? {
+                ...d,
+                completed,
+                completedAt: completed ? new Date().toISOString() : undefined,
+              }
+            : d,
+        ),
+        history: completed
+          ? [
+              historyItem(
+                deadline.clientId,
+                "task_completed",
+                `Срок выполнен: ${deadline.title}`,
+              ),
+              ...data.history,
+            ]
+          : data.history,
+      };
+    }).then(visible),
+
+  addRisk: (clientId: string, text: string) =>
+    mutate((data) => {
+      const risk: MatterRisk = {
+        id: crypto.randomUUID(),
+        clientId,
+        text: text.trim(),
+        isResolved: false,
+        createdAt: new Date().toISOString(),
+      };
+      return {
+        ...data,
+        risks: [risk, ...data.risks],
+        history: [
+          historyItem(clientId, "note_added", `Риск: ${text}`),
+          ...data.history,
+        ],
+      };
+    }).then(visible),
+
+  resolveRisk: (riskId: string) =>
+    mutate((data) => ({
+      ...data,
+      risks: data.risks.map((r) =>
+        r.id === riskId
+          ? {
+              ...r,
+              isResolved: !r.isResolved,
+              resolvedAt: !r.isResolved ? new Date().toISOString() : undefined,
+            }
+          : r,
+      ),
     })).then(visible),
 };

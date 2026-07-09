@@ -21,7 +21,10 @@ npm run dev        # http://localhost:5173
 2. SQL Editor → выполнить по порядку:
    - `supabase/migrations/001_init.sql`
    - `supabase/migrations/002_settings.sql` *(таблица из v0.2; `003` её удаляет — можно пропустить)*
-   - `supabase/migrations/003_auth_ownership.sql`
+   - `supabase/migrations/003_auth_ownership.sql` — auth, `user_id`+RLS, profiles/account_settings
+   - `supabase/migrations/004_matter_model.sql` — matter-поля clients,
+     справочники (типы/стадии дел, типы/статусы документов, типы сроков),
+     таблицы `matter_deadlines`, `matter_risks`
    - `supabase/seed.sql` — опционально, демо-данные (после `003` seed-строки
      не имеют владельца; привяжите к своему пользователю:
      `update clients set user_id = '<ваш auth.uid>' where user_id is null;`

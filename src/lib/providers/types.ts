@@ -7,6 +7,7 @@ import type {
   NotificationEvent,
   NotificationRecipient,
   Profile,
+  ReferenceData,
 } from "../../types/client";
 
 // The UI never talks to Supabase or localStorage directly — only to this
@@ -26,7 +27,24 @@ export interface DataProvider {
     dueDate?: string,
   ): Promise<AppData>;
   toggleTask(taskId: string): Promise<AppData>;
-  addAttachment(clientId: string, fileName: string): Promise<AppData>;
+  addAttachment(
+    clientId: string,
+    fileName: string,
+    documentType?: string,
+    documentStatus?: string,
+  ): Promise<AppData>;
+
+  // matter model (v0.4): key deadlines + open risks per client
+  getReferenceData(): Promise<ReferenceData>;
+  createDeadline(
+    clientId: string,
+    title: string,
+    dueDate: string,
+    deadlineType?: string,
+  ): Promise<AppData>;
+  toggleDeadline(deadlineId: string): Promise<AppData>;
+  addRisk(clientId: string, text: string): Promise<AppData>;
+  resolveRisk(riskId: string): Promise<AppData>;
 
   // account: profile, notification settings, recipients, delivery log
   getProfile(): Promise<Profile>;

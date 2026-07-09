@@ -5,6 +5,7 @@ import type {
   ClientPatch,
   ClientStatus,
   NewClientInput,
+  ReferenceData,
 } from "./types/client";
 import { getProvider } from "./lib/providers";
 import { getSupabase } from "./lib/supabaseClient";
@@ -30,6 +31,16 @@ const emptyData: AppData = {
   history: [],
   tasks: [],
   attachments: [],
+  deadlines: [],
+  risks: [],
+};
+
+const emptyReferenceData: ReferenceData = {
+  matterTypes: [],
+  matterStages: [],
+  documentTypes: [],
+  documentStatuses: [],
+  deadlineTypes: [],
 };
 
 // Root: demo-mode runs without auth; Supabase mode is gated by a session.
@@ -80,6 +91,8 @@ function MainApp() {
   const [provider] = useState(getProvider);
   const [route, navigate] = useHashRoute();
   const [data, setData] = useState<AppData>(emptyData);
+  const [referenceData, setReferenceData] =
+    useState<ReferenceData>(emptyReferenceData);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [view, setView] = useState<ViewMode>(
@@ -100,6 +113,9 @@ function MainApp() {
       .then(setData)
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
+    // reference dictionaries are static per session — fetched once, not
+    // re-pulled on every mutation like AppData
+    provider.getReferenceData().then(setReferenceData).catch(() => {});
   }, [provider]);
 
   useEffect(() => {
@@ -169,8 +185,40 @@ function MainApp() {
     void run(provider.toggleTask(taskId), "Задача обновлена");
   }
 
-  function handleAddAttachment(clientId: string, fileName: string) {
-    void run(provider.addAttachment(clientId, fileName), "Документ прикреплён");
+  function handleAddAttachment(
+    clientId: string,
+    fileName: string,
+    documentType?: string,
+    documentStatus?: string,
+  ) {
+    void run(
+      provider.addAttachment(clientId, fileName, documentType, documentStatus),
+      "Документ прикреплён",
+    );
+  }
+
+  function handleAddDeadline(
+    clientId: string,
+    title: string,
+    dueDate: string,
+    deadlineType?: string,
+  ) {
+    void run(
+      provider.createDeadline(clientId, title, dueDate, deadlineType),
+      "Срок добавлен",
+    );
+  }
+
+  function handleToggleDeadline(deadlineId: string) {
+    void run(provider.toggleDeadline(deadlineId), "Срок обновлён");
+  }
+
+  function handleAddRisk(clientId: string, text: string) {
+    void run(provider.addRisk(clientId, text), "Риск добавлен");
+  }
+
+  function handleResolveRisk(riskId: string) {
+    void run(provider.resolveRisk(riskId), "Обновлено");
   }
 
   async function handleLogout() {
@@ -368,6 +416,9 @@ function MainApp() {
           history={data.history}
           tasks={data.tasks}
           attachments={data.attachments}
+          deadlines={data.deadlines}
+          risks={data.risks}
+          referenceData={referenceData}
           onClose={() => setSelectedId(null)}
           onStatusChange={handleStatusChange}
           onDelete={handleDelete}
@@ -376,6 +427,10 @@ function MainApp() {
           onAddTask={handleAddTask}
           onToggleTask={handleToggleTask}
           onAddAttachment={handleAddAttachment}
+          onAddDeadline={handleAddDeadline}
+          onToggleDeadline={handleToggleDeadline}
+          onAddRisk={handleAddRisk}
+          onResolveRisk={handleResolveRisk}
         />
       )}
 

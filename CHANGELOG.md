@@ -2,6 +2,28 @@
 
 Формат дат: YYYY-MM-DD. Версии соответствуют этапам ТЗ, не npm-релизам.
 
+## v0.4 — 2026-07-09
+
+**Matter model + legal reference dictionaries**
+
+- `clients` расширен полями дела: matter_title, matter_type, matter_subject,
+  stage, counterparty, key_deadline (расширение существующей таблицы, не
+  отдельная сущность — решение зафиксировано и объяснено в docs/architecture.md)
+- Справочники: matter_types, matter_stages, document_types, document_statuses,
+  deadline_types — глобальные, читаемые всем авторизованным пользователям
+- Новые таблицы: `matter_deadlines` (типизированные юридические сроки,
+  отдельно от быстрых задач `tasks`), `matter_risks` (риски/открытые вопросы) —
+  обе с RLS «только свои строки»
+- `attachments` получил `document_type`/`document_status` (nullable, для
+  обратной совместимости со старыми записями)
+- Client Drawer: новые блоки «Сводка дела», «Стороны», «Контрольные сроки»,
+  «Риски / открытые вопросы»; форма редактирования расширена matter-полями
+- localStorage-провайдер: демо-версия справочников + миграция v3→v4
+  (старые сохранения без `deadlines`/`risks` получают пустые массивы)
+- Проверено: запись/чтение через реальный Supabase-проект, RLS-изоляция
+  новых таблиц (симуляция чужой роли — 0 строк), demo-режим без Supabase,
+  доска/таблица не сломаны
+
 ## v0.3 — 2026-07-09 (`c45ed63`)
 
 **Auth + user-owned data + account settings + per-user notification routing**

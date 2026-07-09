@@ -10,9 +10,17 @@ export type Client = {
   telegram?: string;
   status: ClientStatus;
   note?: string;
+  /** @deprecated freeform v0.2 field, kept for old rows — use matterType */
   caseType?: string;
   responsibleLawyer?: string;
   priority?: ClientPriority;
+  // matter fields (v0.4) — dictionary-backed, see ReferenceData
+  matterTitle?: string;
+  matterType?: string; // code from matter_types
+  matterSubject?: string;
+  stage?: string; // code from matter_stages
+  counterparty?: string;
+  keyDeadline?: string; // YYYY-MM-DD
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
@@ -31,8 +39,46 @@ export type ClientPatch = Partial<
     | "caseType"
     | "responsibleLawyer"
     | "priority"
+    | "matterTitle"
+    | "matterType"
+    | "matterSubject"
+    | "stage"
+    | "counterparty"
+    | "keyDeadline"
   >
 >;
+
+// a dictionary entry: matter type, stage, document type/status, deadline type
+export type ReferenceItem = { code: string; label: string };
+
+export type ReferenceData = {
+  matterTypes: ReferenceItem[];
+  matterStages: ReferenceItem[];
+  documentTypes: ReferenceItem[];
+  documentStatuses: ReferenceItem[];
+  deadlineTypes: ReferenceItem[];
+};
+
+export type MatterDeadline = {
+  id: string;
+  clientId: string;
+  deadlineType?: string; // code from deadline_types
+  title: string;
+  dueDate: string; // YYYY-MM-DD
+  completed: boolean;
+  completedAt?: string;
+  note?: string;
+  createdAt: string;
+};
+
+export type MatterRisk = {
+  id: string;
+  clientId: string;
+  text: string;
+  isResolved: boolean;
+  createdAt: string;
+  resolvedAt?: string;
+};
 
 export type HistoryType =
   | "client_created"
@@ -68,6 +114,8 @@ export type Attachment = {
   fileName: string;
   fileUrl?: string;
   storagePath?: string;
+  documentType?: string; // code from document_types
+  documentStatus?: string; // code from document_statuses
   uploadedAt: string;
 };
 
@@ -76,6 +124,8 @@ export type AppData = {
   history: CaseHistoryItem[];
   tasks: Task[];
   attachments: Attachment[];
+  deadlines: MatterDeadline[];
+  risks: MatterRisk[];
 };
 
 export type Profile = {

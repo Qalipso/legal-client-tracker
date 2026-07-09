@@ -15,7 +15,7 @@
 - [docs/architecture.md](docs/architecture.md) — компоненты, data model, потоки, решения (ADR) и trade-offs
 - [docs/setup.md](docs/setup.md) — локальный запуск, Supabase с нуля, Telegram-бот, Vercel deploy
 - [docs/notifications.md](docs/notifications.md) — контракт edge function, события, журнал доставки
-- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v0.3
+- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v0.4
 
 ## Features
 
@@ -29,13 +29,18 @@
 - Переключатель Доска / Таблица (выбор запоминается)
 - Live-счётчики по статусам, поиск по имени/телефону/статусу + фильтр
 
-**Карточка клиента (боковая панель)**
-- Основная информация + смена статуса
-- История дела — timeline всех событий (добавление, заметки, статусы, задачи, документы)
-- Заметки — сохраняются в историю
-- Следующие действия — задачи с датой, чекбоксом выполнения и признаком «просрочено»
-- Документы — прототип: сохраняется имя файла (в проде — Supabase Storage / S3)
-- История изменения статусов — видно, где дело зависло
+**Карточка клиента / дела (боковая панель)**
+- **Сводка дела** — название, тип дела и стадия из справочников, предмет,
+  контрольный срок (с подсветкой просрочки), приоритет
+- **Стороны** — доверитель (контакты клиента) и контрагент
+- Следующие действия — быстрые задачи (дата, чекбокс, признак «просрочено»)
+- **Контрольные сроки** — типизированные юридические дедлайны (процессуальный,
+  ответ на претензию, оплата и т.д.), отдельно от быстрых задач
+- **Риски / открытые вопросы** — список с отметкой «решено»
+- Заметки — сохраняются в историю дела
+- Документы — имя файла + **тип и статус документа** из справочников
+  (в проде — Supabase Storage / S3 вместо имени)
+- История дела — единый timeline всех событий; история статусов — его срез
 
 **Auth и приватность данных (v0.3)**
 - Supabase Auth: регистрация, вход, выход; без сессии приложение показывает
@@ -66,6 +71,12 @@
 - Настройка: @BotFather → токен в секреты → в `#/settings` добавить свой
   chat ID (узнать: @userinfobot) → «Send test notification»
 
+**Справочники (v0.4)**
+- Типы дел, стадии дел, типы документов, статусы документов, типы сроков —
+  глобальные таблицы-словари (`matter_types`, `matter_stages`,
+  `document_types`, `document_statuses`, `deadline_types`), читаемы всем
+  авторизованным пользователям, значения используются в UI как select'ы
+
 **Base**
 - Add client with inline validation, toast notifications
 - **Редактирование клиента**: имя, телефон, email, telegram, тип дела,
@@ -84,22 +95,27 @@
 
 ## Architecture
 
-UI никогда не обращается к хранилищу напрямую — только через repository layer:
+Подробная версия с ADR и trade-offs: [docs/architecture.md](docs/architecture.md).
+Кратко: UI никогда не обращается к хранилищу напрямую — только через repository layer:
 
 ```
-UI (Board / Table / Drawer / Forms)
+UI (Board / Table / Drawer / Settings / Auth)
   └── App state  →  DataProvider interface (src/lib/providers/types.ts)
         ├── supabaseProvider     — если заданы VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
-        └── localStorageProvider — demo-mode fallback (+ v1→v2→v3 миграции данных)
+        └── localStorageProvider — demo-mode fallback (без авторизации, v1→v4 миграции данных)
 ```
 
 Каждая мутация провайдера сама пишет своё событие в `case_history` (activity log)
 и возвращает свежий снимок данных. Клиенты удаляются мягко (`deleted_at`), история
-дела сохраняется. Благодаря интерфейсу провайдера Supabase можно заменить на
-Express/FastAPI без переписывания UI.
+дела сохраняется. Все пользовательские таблицы защищены RLS
+(`user_id = auth.uid()`) — данные разных юристов изолированы на уровне БД, не
+на уровне кода. Уведомления идут через Edge Function, которая резолвит
+`auth.uid()` из JWT пользователя (подробности — [docs/notifications.md](docs/notifications.md)).
 
-Настройка Supabase: создать проект → выполнить `supabase/migrations/001_init.sql`
-и `supabase/seed.sql` → заполнить `.env` по образцу `.env.example`.
+Настройка Supabase: создать проект → по порядку выполнить
+`supabase/migrations/001…004*.sql` → `supabase/seed.sql` (опционально) →
+заполнить `.env` по образцу `.env.example`. Подробный гайд:
+[docs/setup.md](docs/setup.md).
 
 ## Run locally
 
@@ -132,7 +148,9 @@ src/
   types/client.ts     # domain types
   App.tsx             # AuthGate + hash routing + state owner
 supabase/
-  migrations/         # 001 schema · 002 settings (superseded) · 003 auth+RLS
+  migrations/         # 001 schema · 002 settings (superseded by 003) ·
+                      # 003 auth + RLS + profiles/account_settings ·
+                      # 004 matter model + reference dictionaries
   functions/notify-telegram/  # per-user Telegram routing + events log
   seed.sql
 docs/                 # architecture · setup · notifications
@@ -140,34 +158,62 @@ docs/                 # architecture · setup · notifications
 
 ## Data model
 
+Полная схема с типами колонок и RLS — в `supabase/migrations/`. Сокращённая
+доменная модель (TypeScript, `src/types/client.ts`):
+
 ```ts
-Client          { id, name, phone, status, note?, createdAt, updatedAt }
-CaseHistoryItem { id, clientId, type: created|note|status_change|attachment|task, text, createdAt }
-Task            { id, clientId, title, dueDate?, completed, createdAt }
-Attachment      { id, clientId, fileName, uploadedAt }
+Client          { id, name, phone, email?, telegram?, status, note?, priority?,
+                   responsibleLawyer?, matterTitle?, matterType?, matterSubject?,
+                   stage?, counterparty?, keyDeadline?, createdAt, updatedAt, deletedAt? }
+CaseHistoryItem { id, clientId, type: client_created|client_updated|note_added|
+                   status_changed|task_created|task_completed|attachment_added,
+                   text, metadata?, createdAt }
+Task            { id, clientId, title, dueDate?, completed, completedAt?, createdAt }
+MatterDeadline  { id, clientId, deadlineType?, title, dueDate, completed, note?, createdAt }
+MatterRisk      { id, clientId, text, isResolved, createdAt, resolvedAt? }
+Attachment      { id, clientId, fileName, documentType?, documentStatus?, uploadedAt }
+ReferenceItem   { code, label }  // matter types/stages, document types/statuses, deadline types
+Profile, AccountSettings, NotificationRecipient, NotificationEvent  // account & notifications
 ```
 
-Все события пишутся в единый timeline (`CaseHistoryItem`), история статусов — это
-его срез по `type === "status_change"`.
+Все события дела пишутся в единый timeline (`CaseHistoryItem`), история статусов —
+это его срез по `type === "status_changed"`. `Task` (быстрые действия) и
+`MatterDeadline` (типизированные юридические сроки) — сознательно разные
+сущности: первые — ad-hoc «позвонить/проверить», вторые — формальные сроки
+с типом из справочника.
 
 ## Key decisions & trade-offs
 
-- **localStorage over Supabase** — fits the time box; documented limitation: no cross-device
-  sync, no auth. The storage module is the single seam for upgrading.
+- **Supabase как основное хранилище, localStorage — только demo-режим** —
+  начинали с localStorage-first MVP (v0.1), в v0.2 перешли на Supabase через
+  repository layer без переписывания UI; localStorage остался fallback'ом,
+  когда `VITE_SUPABASE_*` не заданы (без авторизации).
+- **RLS вместо фильтрации в коде** — `user_id = auth.uid()` на каждой
+  пользовательской таблице; владение данными гарантирует БД, а не дисциплина
+  разработчика. Изоляция проверена симуляцией ролей (см. docs/architecture.md).
 - **Inline form (not modal)** — fewer moving parts, better on mobile, same UX value.
 - **`window.confirm` for delete** — native, accessible, zero code; a styled dialog is polish
   the MVP doesn't need.
 - **Search matches status labels too** — "в работе" in the search box works as users expect.
+- **Matter model расширяет `clients`, а не заводит отдельную таблицу** —
+  меньше миграций и join'ов; `tasks`/`case_history`/`attachments` не
+  потребовали изменений при переходе на модель дела (v0.4).
 
 ## Next steps
 
+- **Import / export данных** — экспорт клиентов/дел в CSV, импорт из CSV
+- **Header**: имя и роль пользователя, загрузка фото профиля
+- **Вкладка «История и аналитика»** — пока заглушка, далее: отчёты по делам,
+  нагрузке, срокам
+- **Роли** (admin / lawyer / assistant) поверх текущего RLS — сейчас
+  изоляция «пользователь видит только своё», ролевой модели доступа нет
 - **Email reminders** — письма по просроченным задачам и дедлайнам
   (Supabase cron + Resend/Postmark)
-- **Google Calendar integration** — задачи с датой синхронизируются
-  в календарь юриста
+- **Google Calendar integration** — синхронизация контрольных сроков и задач
 - **Real file upload** — Supabase Storage вместо name-only заглушки:
   загрузка содержимого, `storage_path`, ссылка на скачивание
-- Auth + RLS per-user, роли (admin / lawyer / assistant)
+- **task.overdue уведомления** — схема и тумблер уже готовы (v0.3), не
+  хватает планировщика (pg_cron + вызов функции)
 - Automated tests (unit для repositories, E2E для доски)
 
 ## Feedback от реального юриста
@@ -175,12 +221,15 @@ Attachment      { id, clientId, fileName, uploadedAt }
 _[Заполняется после короткого теста с реальным пользователем: что понятно
 сразу, что мешает, чего не хватает для ежедневной работы.]_
 
-## Deferred on purpose (out of scope for the time box)
+## Deferred on purpose (out of scope so far)
 
 - Хранение содержимого файлов (только имена; в проде — Supabase Storage / S3)
-- Automated tests — the app was verified manually end-to-end in a real browser
-  (add, status change, delete, drag-and-drop, search, filter, validation, notes,
-  tasks, overdue, reload persistence, migrations, mobile layout)
+- Import/export, header с фото, вкладка аналитики, ролевая модель — см. Next steps
+- Automated tests — every increment (v0.1 → v0.4) was verified manually
+  end-to-end in a real browser and, for Supabase-backed changes, cross-checked
+  against PostgreSQL directly (RLS isolation via role simulation, row counts,
+  round-trips). Coverage per release is in [CHANGELOG.md](CHANGELOG.md);
+  nothing here is claimed "tested" without that verification having run.
 
 ## AI Usage
 
@@ -197,8 +246,10 @@ I did myself:
 
 ## Time Log
 
-Start: 2026-07-09
-Total: ~2 hours
+Start: 2026-07-09. Grew across several iterations the same day (base MVP →
+case board → Supabase backend → auth/RLS/settings → matter model);
+`git log` / [CHANGELOG.md](CHANGELOG.md) has the accurate breakdown.
+Total: [заполнить перед отправкой — сумма реального времени, не оценка]
 
 ## Notes
 
