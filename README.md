@@ -28,20 +28,39 @@
 - История изменения статусов — видно, где дело зависло
 
 **Base**
-- Add client with inline validation, toast notifications, delete with confirmation
-- Local persistence (localStorage) with v1 → v2 data migration
+- Add client with inline validation, toast notifications
+- **Редактирование клиента**: имя, телефон, email, telegram, тип дела,
+  ответственный юрист, приоритет, комментарий — изменение попадает в историю
+- Soft delete с подтверждением (дело можно восстановить, история не теряется)
+- Персистентность: Supabase (PostgreSQL) или localStorage fallback с миграциями
 - Seed demo data on first visit; responsive layout (mobile → desktop)
 
 ## Stack
 
 - React 19 + TypeScript (Vite)
 - Tailwind CSS v4
-- localStorage (no backend)
+- **Supabase (PostgreSQL)** — основное хранилище; схема в `supabase/migrations/`
+- **localStorage fallback** — demo/dev-режим, если Supabase env не задан
 - Vercel (deploy)
 
-**Why this stack:** the assignment budget is 2–4 hours; React + localStorage + Vercel is the
-fastest path to a working, deployable product without backend complexity. The data layer is
-isolated in `src/lib/clients.ts`, so swapping localStorage for Supabase later is a one-file change.
+## Architecture
+
+UI никогда не обращается к хранилищу напрямую — только через repository layer:
+
+```
+UI (Board / Table / Drawer / Forms)
+  └── App state  →  DataProvider interface (src/lib/providers/types.ts)
+        ├── supabaseProvider     — если заданы VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+        └── localStorageProvider — demo-mode fallback (+ v1→v2→v3 миграции данных)
+```
+
+Каждая мутация провайдера сама пишет своё событие в `case_history` (activity log)
+и возвращает свежий снимок данных. Клиенты удаляются мягко (`deleted_at`), история
+дела сохраняется. Благодаря интерфейсу провайдера Supabase можно заменить на
+Express/FastAPI без переписывания UI.
+
+Настройка Supabase: создать проект → выполнить `supabase/migrations/001_init.sql`
+и `supabase/seed.sql` → заполнить `.env` по образцу `.env.example`.
 
 ## Run locally
 

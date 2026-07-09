@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AppData, ClientStatus } from "./types/client";
-import {
-  createClient,
-  createHistoryItem,
-  createTask,
-  loadData,
-  saveData,
-} from "./lib/clients";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  AppData,
+  ClientPatch,
+  ClientStatus,
+  NewClientInput,
+} from "./types/client";
+import { getProvider } from "./lib/providers";
 import { STATUS_LABELS } from "./lib/statuses";
 import StatusCards from "./components/StatusCards";
 import ClientForm from "./components/ClientForm";
@@ -20,8 +19,18 @@ type ViewMode = "table" | "board";
 
 const VIEW_KEY = "legal-client-tracker:view";
 
+const emptyData: AppData = {
+  clients: [],
+  history: [],
+  tasks: [],
+  attachments: [],
+};
+
 export default function App() {
-  const [data, setData] = useState<AppData>(() => loadData());
+  const provider = useRef(getProvider()).current;
+  const [data, setData] = useState<AppData>(emptyData);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [view, setView] = useState<ViewMode>(
     () => (localStorage.getItem(VIEW_KEY) as ViewMode) || "board",
   );
@@ -34,8 +43,12 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    saveData(data);
-  }, [data]);
+    provider
+      .fetchAll()
+      .then(setData)
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  }, [provider]);
 
   useEffect(() => {
     localStorage.setItem(VIEW_KEY, view);
@@ -43,126 +56,55 @@ export default function App() {
 
   const dismissToast = useCallback(() => setToast(null), []);
 
-  function handleAdd(input: {
-    name: string;
-    phone: string;
-    status: ClientStatus;
-    note?: string;
-  }) {
-    const client = createClient(input);
-    setData((prev) => ({
-      ...prev,
-      clients: [client, ...prev.clients],
-      history: [
-        createHistoryItem(client.id, "created", "Клиент добавлен"),
-        ...prev.history,
-      ],
-    }));
+  // every mutation returns the fresh snapshot; on failure the UI keeps
+  // its previous state and reports the error instead of pretending
+  async function run(action: Promise<AppData>, message: string) {
+    try {
+      setData(await action);
+      setToast(message);
+    } catch {
+      setToast("Ошибка сохранения — попробуйте ещё раз");
+    }
+  }
+
+  function handleAdd(input: NewClientInput) {
     setShowForm(false);
-    setToast("Клиент добавлен");
+    void run(provider.createClient(input), "Клиент добавлен");
+  }
+
+  function handleUpdateClient(id: string, patch: ClientPatch) {
+    void run(provider.updateClient(id, patch), "Данные клиента обновлены");
   }
 
   function handleStatusChange(id: string, status: ClientStatus) {
-    setData((prev) => {
-      const client = prev.clients.find((c) => c.id === id);
-      if (!client || client.status === status) return prev;
-      return {
-        ...prev,
-        clients: prev.clients.map((c) =>
-          c.id === id
-            ? { ...c, status, updatedAt: new Date().toISOString() }
-            : c,
-        ),
-        history: [
-          createHistoryItem(
-            id,
-            "status_change",
-            `${STATUS_LABELS[client.status]} → ${STATUS_LABELS[status]}`,
-          ),
-          ...prev.history,
-        ],
-      };
-    });
-    setToast("Статус обновлён");
+    void run(provider.updateClientStatus(id, status), "Статус обновлён");
   }
 
   function handleDelete(id: string) {
     const client = data.clients.find((c) => c.id === id);
     if (!client) return;
     if (!window.confirm(`Удалить клиента «${client.name}»?`)) return;
-    setData((prev) => ({
-      clients: prev.clients.filter((c) => c.id !== id),
-      history: prev.history.filter((h) => h.clientId !== id),
-      tasks: prev.tasks.filter((t) => t.clientId !== id),
-      attachments: prev.attachments.filter((a) => a.clientId !== id),
-    }));
     setSelectedId(null);
-    setToast("Клиент удалён");
+    void run(provider.softDeleteClient(id), "Клиент удалён");
   }
 
   function handleAddNote(clientId: string, text: string) {
-    setData((prev) => ({
-      ...prev,
-      history: [createHistoryItem(clientId, "note", text), ...prev.history],
-    }));
-    setToast("Заметка добавлена");
+    void run(provider.addNote(clientId, text), "Заметка добавлена");
   }
 
   function handleAddTask(clientId: string, title: string, dueDate?: string) {
-    const task = createTask(clientId, title, dueDate);
-    setData((prev) => ({
-      ...prev,
-      tasks: [...prev.tasks, task],
-      history: [
-        createHistoryItem(clientId, "task", `Задача: ${title}`),
-        ...prev.history,
-      ],
-    }));
-    setToast("Задача добавлена");
+    void run(provider.createTask(clientId, title, dueDate), "Задача добавлена");
   }
 
   function handleToggleTask(taskId: string) {
-    setData((prev) => {
-      const task = prev.tasks.find((t) => t.id === taskId);
-      if (!task) return prev;
-      const completed = !task.completed;
-      return {
-        ...prev,
-        tasks: prev.tasks.map((t) =>
-          t.id === taskId ? { ...t, completed } : t,
-        ),
-        history: completed
-          ? [
-              createHistoryItem(
-                task.clientId,
-                "task",
-                `Задача выполнена: ${task.title}`,
-              ),
-              ...prev.history,
-            ]
-          : prev.history,
-      };
-    });
+    void run(provider.toggleTask(taskId), "Задача обновлена");
   }
 
   function handleAddAttachment(clientId: string, fileName: string) {
-    setData((prev) => ({
-      ...prev,
-      attachments: [
-        ...prev.attachments,
-        {
-          id: crypto.randomUUID(),
-          clientId,
-          fileName,
-          uploadedAt: new Date().toISOString(),
-        },
-      ],
-      history: [
-        createHistoryItem(clientId, "attachment", `Документ: ${fileName}`),
-        ...prev.history,
-      ],
-    }));
-    setToast("Документ прикреплён");
+    void run(
+      provider.addAttachment(clientId, fileName),
+      "Документ прикреплён",
+    );
   }
 
   const visibleClients = useMemo(() => {
@@ -203,66 +145,86 @@ export default function App() {
         </header>
 
         <main className="mt-6 flex flex-col gap-6">
-          <StatusCards clients={data.clients} />
-
-          {showForm && (
-            <ClientForm onAdd={handleAdd} onCancel={() => setShowForm(false)} />
+          {loading && (
+            <p className="py-16 text-center text-sm text-slate-400">
+              Загрузка данных…
+            </p>
           )}
+          {loadError && (
+            <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
+              Не удалось загрузить данные. Проверьте подключение и обновите
+              страницу.
+            </p>
+          )}
+          {!loading && !loadError && (
+            <>
+              <StatusCards clients={data.clients} />
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Filters
-              search={search}
-              onSearchChange={setSearch}
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-            />
-            <div
-              role="group"
-              aria-label="Вид"
-              className="flex shrink-0 rounded-lg border border-slate-300 bg-white p-0.5"
-            >
-              {(
-                [
-                  ["board", "Доска"],
-                  ["table", "Таблица"],
-                ] as const
-              ).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setView(mode)}
-                  aria-pressed={view === mode}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                    view === mode
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-600 hover:bg-slate-50"
-                  }`}
+              {showForm && (
+                <ClientForm
+                  onAdd={handleAdd}
+                  onCancel={() => setShowForm(false)}
+                />
+              )}
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <Filters
+                  search={search}
+                  onSearchChange={setSearch}
+                  statusFilter={statusFilter}
+                  onStatusFilterChange={setStatusFilter}
+                />
+                <div
+                  role="group"
+                  aria-label="Вид"
+                  className="flex shrink-0 rounded-lg border border-slate-300 bg-white p-0.5"
                 >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+                  {(
+                    [
+                      ["board", "Доска"],
+                      ["table", "Таблица"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setView(mode)}
+                      aria-pressed={view === mode}
+                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                        view === mode
+                          ? "bg-slate-900 text-white"
+                          : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          {view === "board" ? (
-            <BoardView
-              clients={visibleClients}
-              tasks={data.tasks}
-              onOpenClient={setSelectedId}
-            />
-          ) : (
-            <ClientTable
-              clients={visibleClients}
-              totalCount={data.clients.length}
-              onStatusChange={handleStatusChange}
-              onDelete={handleDelete}
-              onOpenClient={setSelectedId}
-            />
+              {view === "board" ? (
+                <BoardView
+                  clients={visibleClients}
+                  tasks={data.tasks}
+                  onOpenClient={setSelectedId}
+                />
+              ) : (
+                <ClientTable
+                  clients={visibleClients}
+                  totalCount={data.clients.length}
+                  onStatusChange={handleStatusChange}
+                  onDelete={handleDelete}
+                  onOpenClient={setSelectedId}
+                />
+              )}
+            </>
           )}
         </main>
 
         <footer className="mt-8 text-center text-xs text-slate-400">
-          Данные хранятся локально в вашем браузере (localStorage).
+          {provider.name === "supabase"
+            ? "Данные хранятся в Supabase (PostgreSQL)."
+            : "Demo-режим: данные хранятся локально в вашем браузере (localStorage)."}
         </footer>
       </div>
 
@@ -275,6 +237,7 @@ export default function App() {
           onClose={() => setSelectedId(null)}
           onStatusChange={handleStatusChange}
           onDelete={handleDelete}
+          onUpdateClient={handleUpdateClient}
           onAddNote={handleAddNote}
           onAddTask={handleAddTask}
           onToggleTask={handleToggleTask}
