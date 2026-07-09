@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AppData,
   ClientPatch,
@@ -27,7 +27,9 @@ const emptyData: AppData = {
 };
 
 export default function App() {
-  const provider = useRef(getProvider()).current;
+  // lazy init — evaluated exactly once per mount, and getProvider itself
+  // caches at module level, so the Supabase client is a true singleton
+  const [provider] = useState(getProvider);
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -207,6 +209,7 @@ export default function App() {
                   clients={visibleClients}
                   tasks={data.tasks}
                   onOpenClient={setSelectedId}
+                  onStatusChange={handleStatusChange}
                 />
               ) : (
                 <ClientTable

@@ -96,9 +96,9 @@ export default function ClientDetails(props: Props) {
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${STATUS_STYLES[client.status].badge}`}
             >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${STATUS_STYLES[client.status].dot}`}
-              />
+              <span aria-hidden="true">
+                {STATUS_STYLES[client.status].icon}
+              </span>
               {STATUS_LABELS[client.status]}
             </span>
             <select

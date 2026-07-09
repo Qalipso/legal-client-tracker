@@ -63,7 +63,11 @@ export function createSupabaseProvider(
   url: string,
   anonKey: string,
 ): DataProvider {
-  const sb = createSupabaseClient(url, anonKey);
+  // no auth in the MVP — disable session persistence so GoTrueClient
+  // doesn't claim a storage key it never uses
+  const sb = createSupabaseClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   async function fetchAll(): Promise<AppData> {
     const [clients, history, tasks, attachments] = await Promise.all([
