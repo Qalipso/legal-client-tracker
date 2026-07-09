@@ -444,6 +444,7 @@ export const localStorageProvider: DataProvider = {
     Promise.resolve(
       readJson(`${SETTINGS_KEY}:account`, {
         telegramEnabled: true,
+        emailEnabled: false,
         notifyOnClientCreated: true,
         notifyOnTaskOverdue: true,
         notifyOnStatusChanged: false,
@@ -468,7 +469,7 @@ export const localStorageProvider: DataProvider = {
     list.push({
       id: crypto.randomUUID(),
       name: input.name.trim(),
-      channel: "telegram",
+      channel: input.channel ?? "telegram",
       destination: input.destination.trim(),
       isActive: true,
     });

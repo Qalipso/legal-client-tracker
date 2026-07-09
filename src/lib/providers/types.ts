@@ -63,6 +63,7 @@ export interface DataProvider {
   addRecipient(input: {
     name: string;
     destination: string;
+    channel?: "telegram" | "email";
   }): Promise<NotificationRecipient[]>;
   updateRecipient(
     id: string,

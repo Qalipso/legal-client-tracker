@@ -141,6 +141,7 @@ export type Profile = {
 
 export type AccountSettings = {
   telegramEnabled: boolean;
+  emailEnabled: boolean;
   notifyOnClientCreated: boolean;
   notifyOnTaskOverdue: boolean;
   notifyOnStatusChanged: boolean;
@@ -149,8 +150,8 @@ export type AccountSettings = {
 export type NotificationRecipient = {
   id: string;
   name: string;
-  channel: "telegram";
-  destination: string; // telegram chat_id
+  channel: "telegram" | "email";
+  destination: string; // telegram chat_id, or an email address
   isActive: boolean;
 };
 

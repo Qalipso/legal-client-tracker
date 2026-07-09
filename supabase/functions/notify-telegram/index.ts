@@ -1,5 +1,14 @@
-// Telegram notification routing (v5, per-user + internal/cron callers).
-// - Bot token lives ONLY in Supabase secrets (TG_BOT_TOKEN)
+// Notification routing — Telegram + email (v6, per-user + internal/cron
+// callers). Endpoint name/path kept as "notify-telegram" for stability (the
+// frontend + pg_cron both call this URL); it now dispatches by recipient
+// channel rather than only Telegram.
+// - Telegram bot token lives ONLY in Supabase secrets (TG_BOT_TOKEN)
+// - Email delivery uses the Resend API — needs RESEND_API_KEY and
+//   RESEND_FROM_EMAIL set as edge function secrets (not settable from this
+//   project's tooling). Without them, email recipients get a logged "not
+//   configured" error per attempt and Telegram recipients are unaffected.
+//   [Not verified]: no Resend account/API key exists for this project, so
+//   the email path has not been exercised against the real Resend API.
 // - verify_jwt is OFF at the gateway: pg_cron's net.http_post can't send an
 //   Authorization header, so this function does its OWN auth instead:
 //   1. USER's JWT (Authorization header) — normal path, from the app UI.
@@ -11,7 +20,8 @@
 //   Every call is authenticated by one of these two paths before any work happens.
 // - Recipients + event toggles come from the user's account settings
 // - Every attempt is logged to notification_events
-// If Telegram is not configured or there are no recipients → {skipped:true}.
+// If a channel is disabled/not configured or there are no recipients for it
+// → {skipped:true} (or per-recipient "error" rows for a mixed batch).
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -160,50 +170,98 @@ Deno.serve(async (req: Request) => {
     `account_settings?user_id=eq.${userId}&select=*`,
   );
   const settings = settingsRows[0] ?? {};
-  if (settings.telegram_enabled === false && eventType !== "test") {
-    return skip("Telegram-уведомления выключены в настройках");
-  }
   const toggleColumn = EVENT_TOGGLES[eventType];
   if (toggleColumn && settings[toggleColumn] === false) {
     const label = EVENT_LABELS[eventType] ?? eventType;
     return skip(`событие «${label}» выключено в настройках`);
   }
 
-  const token = Deno.env.get("TG_BOT_TOKEN");
-  if (!token) return skip("TG_BOT_TOKEN не задан в секретах Supabase");
+  // "test" bypasses the enable toggles (same as before) so a user can
+  // verify a recipient works even before flipping the channel on.
+  const channelsEnabled: string[] =
+    eventType === "test"
+      ? ["telegram", "email"]
+      : [
+          ...(settings.telegram_enabled !== false ? ["telegram"] : []),
+          ...(settings.email_enabled === true ? ["email"] : []),
+        ];
+  if (channelsEnabled.length === 0) {
+    return skip("все каналы уведомлений выключены в настройках");
+  }
 
   const recipients = await select(
-    `notification_recipients?user_id=eq.${userId}&is_active=eq.true&channel=eq.telegram&select=id,destination`,
+    `notification_recipients?user_id=eq.${userId}&is_active=eq.true&channel=in.(${channelsEnabled.join(",")})&select=id,channel,destination`,
   );
   if (recipients.length === 0) {
-    return skip("нет активных получателей — добавьте chat ID в настройках");
+    return skip("нет активных получателей для включённых каналов");
   }
 
   const text = buildText(eventType, payload);
+  const token = Deno.env.get("TG_BOT_TOKEN");
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  const resendFrom = Deno.env.get("RESEND_FROM_EMAIL");
+
   let delivered = 0;
   let failed = 0;
   const errors: string[] = [];
 
   for (const r of recipients) {
-    const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: r.destination, text }),
-    }).catch(() => null);
-    const tgBody = await tg?.json().catch(() => null);
-    const ok = Boolean(tg?.ok && tgBody?.ok);
+    let ok = false;
+    let errorMsg: string | null = null;
+
+    if (r.channel === "telegram") {
+      if (!token) {
+        errorMsg = "TG_BOT_TOKEN не задан в секретах Supabase";
+      } else {
+        const tg = await fetch(
+          `https://api.telegram.org/bot${token}/sendMessage`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: r.destination, text }),
+          },
+        ).catch(() => null);
+        const tgBody = await tg?.json().catch(() => null);
+        ok = Boolean(tg?.ok && tgBody?.ok);
+        if (!ok) errorMsg = tgBody?.description ?? `HTTP ${tg?.status ?? "network"}`;
+      }
+    } else if (r.channel === "email") {
+      if (!resendKey || !resendFrom) {
+        errorMsg = "RESEND_API_KEY / RESEND_FROM_EMAIL не заданы в секретах Supabase";
+      } else {
+        const mail = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: resendFrom,
+            to: r.destination,
+            subject: EVENT_LABELS[eventType] ?? "Legal Client Tracker",
+            text,
+          }),
+        }).catch(() => null);
+        const mailBody = await mail?.json().catch(() => null);
+        ok = Boolean(mail?.ok);
+        if (!ok) errorMsg = mailBody?.message ?? `HTTP ${mail?.status ?? "network"}`;
+      }
+    } else {
+      errorMsg = `неизвестный канал: ${r.channel}`;
+    }
+
     if (ok) delivered++;
     else {
       failed++;
-      errors.push(tgBody?.description ?? `HTTP ${tg?.status ?? "network"}`);
+      if (errorMsg) errors.push(errorMsg);
     }
     await logEvent({
       user_id: userId,
       event_type: eventType,
       recipient_id: r.id,
-      channel: "telegram",
+      channel: r.channel,
       status: ok ? "sent" : "error",
-      error: ok ? null : (tgBody?.description ?? `HTTP ${tg?.status ?? "network"}`),
+      error: ok ? null : errorMsg,
       payload,
       sent_at: ok ? new Date().toISOString() : null,
     });

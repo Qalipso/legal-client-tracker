@@ -73,6 +73,9 @@ export default function SettingsPage({
   const [loadError, setLoadError] = useState(false);
   const [newName, setNewName] = useState("");
   const [newChatId, setNewChatId] = useState("");
+  const [newChannel, setNewChannel] = useState<"telegram" | "email">(
+    "telegram",
+  );
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -245,7 +248,11 @@ export default function SettingsPage({
     if (!newName.trim() || !newChatId.trim() || isAssistant) return;
     try {
       setRecipients(
-        await provider.addRecipient({ name: newName, destination: newChatId }),
+        await provider.addRecipient({
+          name: newName,
+          destination: newChatId,
+          channel: newChannel,
+        }),
       );
       setNewName("");
       setNewChatId("");
@@ -449,10 +456,17 @@ export default function SettingsPage({
             </div>
             <div className="mt-3 flex flex-col gap-2">
               {toggle("Telegram-уведомления включены", "telegramEnabled")}
+              {toggle("Email-уведомления включены", "emailEnabled")}
               {toggle("Новый клиент", "notifyOnClientCreated")}
               {toggle("Просроченная задача", "notifyOnTaskOverdue")}
               {toggle("Смена статуса дела", "notifyOnStatusChanged")}
             </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Email-уведомления: доставка через Resend ещё не подключена
+              (нет API-ключа) — переключатель сохраняется, но письма не
+              отправляются, пока администратор не настроит RESEND_API_KEY /
+              RESEND_FROM_EMAIL в секретах Supabase.
+            </p>
           </section>
 
           {/* Recipients */}
@@ -483,6 +497,9 @@ export default function SettingsPage({
                 >
                   <span className={r.isActive ? "" : "text-slate-400 line-through"}>
                     <span className="font-medium">{r.name}</span>{" "}
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+                      {r.channel === "email" ? "email" : "telegram"}
+                    </span>{" "}
                     <span className="text-slate-500">· {r.destination}</span>
                   </span>
                   {!isAssistant && (
@@ -518,6 +535,17 @@ export default function SettingsPage({
 
             {!isAssistant && (
               <form onSubmit={addRecipient} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={newChannel}
+                  onChange={(e) =>
+                    setNewChannel(e.target.value as "telegram" | "email")
+                  }
+                  aria-label="Канал получателя"
+                  className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+                >
+                  <option value="telegram">Telegram</option>
+                  <option value="email">Email</option>
+                </select>
                 <input
                   type="text"
                   value={newName}
@@ -530,8 +558,12 @@ export default function SettingsPage({
                   type="text"
                   value={newChatId}
                   onChange={(e) => setNewChatId(e.target.value)}
-                  placeholder="Telegram chat ID"
-                  aria-label="Telegram chat ID"
+                  placeholder={
+                    newChannel === "email" ? "Email адрес" : "Telegram chat ID"
+                  }
+                  aria-label={
+                    newChannel === "email" ? "Email адрес" : "Telegram chat ID"
+                  }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
                 />
                 <button

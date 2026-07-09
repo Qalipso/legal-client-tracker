@@ -383,6 +383,7 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
       if (error) throw error;
       return {
         telegramEnabled: data?.telegram_enabled ?? true,
+        emailEnabled: data?.email_enabled ?? false,
         notifyOnClientCreated: data?.notify_on_client_created ?? true,
         notifyOnTaskOverdue: data?.notify_on_task_overdue ?? true,
         notifyOnStatusChanged: data?.notify_on_status_changed ?? false,
@@ -396,6 +397,7 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
       const { error } = await sb.from("account_settings").upsert({
         user_id: uid,
         telegram_enabled: settings.telegramEnabled,
+        email_enabled: settings.emailEnabled,
         notify_on_client_created: settings.notifyOnClientCreated,
         notify_on_task_overdue: settings.notifyOnTaskOverdue,
         notify_on_status_changed: settings.notifyOnStatusChanged,
@@ -418,7 +420,7 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
       const { error } = await sb.from("notification_recipients").insert({
         name: input.name.trim(),
         destination: input.destination.trim(),
-        channel: "telegram",
+        channel: input.channel ?? "telegram",
       });
       if (error) throw error;
       return this.listRecipients();
