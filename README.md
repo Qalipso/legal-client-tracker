@@ -57,7 +57,7 @@
 - Уведомления: Telegram вкл/выкл + тумблеры по событиям (новый клиент,
   просроченная задача, смена статуса)
 - Получатели: список Telegram chat ID (имя + chat_id + активность),
-  добавление/отключение/удаление, «Send test notification»
+  добавление/отключение/удаление, «Отправить тест»
 - История уведомлений: последние попытки с статусами sent / error / skipped
 
 **Telegram-уведомления (per-user routing)**
@@ -74,7 +74,7 @@
   не нужен сторонний @userinfobot
 - Настройка: @BotFather → токен в секреты → задеплоить обе функции →
   зарегистрировать webhook → написать боту `/start` → скопировать chat ID →
-  в `#/settings` добавить получателя → «Send test notification»
+  в `#/settings` добавить получателя → «Отправить тест»
 
 **Справочники (v0.4)**
 - Типы дел, стадии дел, типы документов, статусы документов, типы сроков —
@@ -184,7 +184,7 @@ supabase/
                       # 005 roles (admin/lawyer/assistant) + avatars storage
   functions/notify-telegram/  # per-user Telegram routing + events log
   seed.sql
-docs/                 # architecture · setup · notifications
+docs/                 # architecture · setup · notifications · qa/ui-test-plan
 ```
 
 ## Data model
