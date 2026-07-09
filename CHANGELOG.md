@@ -2,6 +2,40 @@
 
 Формат дат: YYYY-MM-DD. Версии соответствуют этапам ТЗ, не npm-релизам.
 
+## v0.5.2 — 2026-07-09
+
+**Full-screen UI audit (desktop 1920×1080 + mobile 375×812) + fixes**
+
+- `docs/qa/ui-test-plan.md`: screen×check matrix, 6 findings, 2 ruled-out
+  false positives (documented why, not just dropped silently)
+- Fixed: header didn't wrap on mobile — chip + 3-button group squeezed
+  onto one row, "+ Добавить клиента" broke across 3 lines
+- Fixed: Settings → Уведомления header + status pill collided on mobile
+  (long pill text wrapped above the short title)
+- Fixed: raw `event_type` code (`status.changed`) leaked into the
+  user-facing skip reason in notification history — now uses the same
+  human labels as the Settings UI (edge function v6, redeployed)
+- Fixed: "Send test notification" was the only English string in an
+  otherwise fully Russian UI — now «Отправить тест»
+- Fixed: Client Drawer fixed at 448px regardless of screen size — long
+  vertical scroll on wide monitors; now widens to 576px/672px on lg/xl
+- Fixed: Settings subtitle didn't mention the Данные/История sections
+  that already exist on the page
+- Verified each fix live in the browser at both resolutions after the
+  change (not just before/after diff reading)
+
+## v0.5.1 — 2026-07-09
+
+**Telegram bot responds to /start**
+
+- New public edge function `telegram-webhook` (`verify_jwt:false`):
+  GET self-registers via `setWebhook` (self-referential URL only), POST
+  handles incoming Telegram Updates
+- Replies to `/start` (and any first message) with chat_id ready to paste
+  into Settings → Получатели — replaces the @userinfobot workaround
+- Guarded by `X-Telegram-Bot-Api-Secret-Token`; verified end-to-end
+  (registration 200, synthetic /start processed 200, wrong secret 401)
+
 ## v0.5 — 2026-07-09
 
 **Header + roles + import/export + analytics placeholder + tests**

@@ -82,7 +82,7 @@ export default function ClientDetails(props: Props) {
       <aside
         role="dialog"
         aria-label={`Карточка дела: ${client.name}`}
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-y-auto bg-white shadow-2xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-y-auto bg-white shadow-2xl lg:max-w-xl xl:max-w-2xl"
       >
         {/* header */}
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white p-4">

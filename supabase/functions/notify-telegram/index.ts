@@ -59,6 +59,16 @@ const EVENT_TOGGLES: Record<string, string> = {
   "status.changed": "notify_on_status_changed",
 };
 
+// human labels for skip reasons — mirrors SettingsPage's EVENT_LABELS so
+// the UI never shows a raw event_type code like "status.changed"
+const EVENT_LABELS: Record<string, string> = {
+  "client.created": "Новый клиент",
+  "task.created": "Новая задача",
+  "task.overdue": "Просроченная задача",
+  "status.changed": "Смена статуса",
+  test: "Тест",
+};
+
 function buildText(eventType: string, p: Record<string, unknown>): string {
   switch (eventType) {
     case "test":
@@ -127,7 +137,8 @@ Deno.serve(async (req: Request) => {
   }
   const toggleColumn = EVENT_TOGGLES[eventType];
   if (toggleColumn && settings[toggleColumn] === false) {
-    return skip(`событие «${eventType}» выключено в настройках`);
+    const label = EVENT_LABELS[eventType] ?? eventType;
+    return skip(`событие «${label}» выключено в настройках`);
   }
 
   const token = Deno.env.get("TG_BOT_TOKEN");
