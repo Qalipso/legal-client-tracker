@@ -153,6 +153,8 @@ export type NotificationRecipient = {
   channel: "telegram" | "email";
   destination: string; // telegram chat_id, or an email address
   isActive: boolean;
+  telegramUsername?: string;
+  telegramLocale?: string;
 };
 
 export type NotificationEvent = {
@@ -162,6 +164,7 @@ export type NotificationEvent = {
   channel?: string;
   status: "sent" | "error" | "skipped";
   error?: string;
+  payload?: Record<string, unknown>;
   createdAt: string;
   sentAt?: string;
 };

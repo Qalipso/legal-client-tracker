@@ -25,6 +25,10 @@ import SettingsPage from "./components/SettingsPage";
 import AnalyticsPage from "./components/AnalyticsPage";
 import UserChip from "./components/UserChip";
 import ThemeToggle from "./components/ThemeToggle";
+import OnboardingChecklist, {
+  dismissOnboarding,
+  isOnboardingDismissed,
+} from "./components/OnboardingChecklist";
 
 type ViewMode = "table" | "board";
 
@@ -113,6 +117,11 @@ function MainApp() {
   );
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(
+    isOnboardingDismissed,
+  );
+  const [hasTelegramConnected, setHasTelegramConnected] = useState(false);
+  const [hasSentNotification, setHasSentNotification] = useState(false);
 
   useEffect(() => {
     provider
@@ -124,6 +133,23 @@ function MainApp() {
     // re-pulled on every mutation like AppData
     provider.getReferenceData().then(setReferenceData).catch(() => {});
     provider.getProfile().then(setProfile).catch(() => {});
+    // Onboarding-checklist signals only — skipped once dismissed, so a
+    // returning user who's hidden the checklist doesn't pay for two extra
+    // fetches on every board load.
+    if (!isOnboardingDismissed()) {
+      provider
+        .listRecipients()
+        .then((list) =>
+          setHasTelegramConnected(
+            list.some((r) => r.channel === "telegram" && r.isActive),
+          ),
+        )
+        .catch(() => {});
+      provider
+        .listNotificationEvents(5)
+        .then((events) => setHasSentNotification(events.some((e) => e.status === "sent")))
+        .catch(() => {});
+    }
   }, [provider]);
 
   useEffect(() => {
@@ -368,6 +394,26 @@ function MainApp() {
             !loading &&
             !loadError && (
               <>
+                {!onboardingDismissed &&
+                  !(
+                    data.clients.length > 0 &&
+                    hasTelegramConnected &&
+                    hasSentNotification &&
+                    data.deadlines.length > 0
+                  ) && (
+                    <OnboardingChecklist
+                      hasClient={data.clients.length > 0}
+                      hasTelegramConnected={hasTelegramConnected}
+                      hasSentNotification={hasSentNotification}
+                      hasDeadline={data.deadlines.length > 0}
+                      onDismiss={() => {
+                        dismissOnboarding();
+                        setOnboardingDismissed(true);
+                      }}
+                      onOpenSettings={() => navigate("#/settings")}
+                    />
+                  )}
+
                 <StatusCards clients={data.clients} />
 
                 {showForm && (

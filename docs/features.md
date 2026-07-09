@@ -27,6 +27,7 @@
 | Фильтр «Просроченные задачи» | v0.3 | `src/App.tsx` |
 | Цветовая система статусов (иконки, тонированные колонки) | v0.2.1 | `src/lib/statuses.ts` |
 | Welcome empty state для нового пользователя | v0.3 | `src/App.tsx` |
+| Чеклист «Быстрый старт» (клиент/Telegram/тест/срок), авто-скрывается по завершении, дизмиссится вручную | v1.0 | `src/components/OnboardingChecklist.tsx` |
 
 ## 3. Карточка клиента / дела (Client Drawer)
 
@@ -84,7 +85,11 @@
 | Fire-and-forget вызов из UI (не блокирует основной сценарий) | v0.2.1 | `src/lib/notify.ts` |
 | `task.overdue` планировщик (pg_cron, ежедневно 08:00 UTC) | v0.6 | migration 007, `notify_overdue_items()` |
 | Email-канал (получатели, toggle, dispatch через Resend, верифицированный домен `shatalov.dev`) | v0.6 | migration 008, `notify-telegram/index.ts` |
-| Token-based Telegram connect («📎 Подключить Telegram», без ручного chat ID) | v0.8 | migration 009, `telegram-webhook/index.ts`, `SettingsPage.tsx: connectTelegram` |
+| Token-based Telegram connect («📎 Подключить Telegram», без ручного chat ID); токен хешируется (v0.8.1), reconnect не дублирует получателя (v0.8.2) | v0.8–v0.8.2 | migrations 009–011, `telegram-webhook/index.ts`, `SettingsPage.tsx: connectTelegram` |
+| Явные состояния подключения Telegram (idle/connecting/timeout/error), ручной ввод chat ID убран в «Дополнительно» | v1.0 | `SettingsPage.tsx: telegramState` |
+| Подключённый получатель показывает display name / @username / канал / locale | v1.0 | migration 012, `telegram-webhook/index.ts: createRecipient` |
+| Повтор одной неудачной отправки («Повторить»), без повторной отправки всем получателям | v1.0 | `notify-telegram/index.ts: recipient_id`, `src/lib/notify.ts: retryNotification` |
+| Человекочитаемые причины ошибок доставки | v1.0 | `SettingsPage.tsx: friendlyError` |
 | История уведомлений показывает получателя (имя+канал) для каждой попытки | v0.8 | `SettingsPage.tsx: История уведомлений` |
 
 ## 7. История и аналитика

@@ -201,6 +201,19 @@ notify-telegram:
     подключённого чата плодил вторую запись, тот же чат получал бы
     уведомления дважды. `unique (user_id, channel, destination)` +
     `Prefer: resolution=merge-duplicates`.
+17. **Retry через `recipient_id`, не через повторный полный dispatch** (v1.0) —
+    повторная отправка всем активным получателям при retry одного
+    провалившегося события переуведомила бы тех, кто уже получил его
+    успешно. `recipient_id` в теле запроса сужает `notify-telegram` до
+    ровно одного адресата, с явной проверкой владения (`user_id=eq.` в том
+    же запросе, что и `id=eq.`) — иначе можно было бы повторить чужую
+    отправку, подобрав `recipient_id`.
+18. **Чеклист онбординга выводится из реальных данных, а не из отдельного
+    флага** (v1.0) — «клиент есть» / «Telegram подключён» / «уведомление
+    отправлено» / «срок есть» вычисляются на лету из уже загруженных
+    данных плюс двух дешёвых запросов (получатели, последние события).
+    Нет риска рассинхронизации между «флагом онбординга» и фактическим
+    состоянием аккаунта. Дизмисс — простой флаг в localStorage.
 
 ## 7. Trade-offs
 
@@ -237,6 +250,7 @@ src/
     Filters.tsx       # search + status filter
     Toast.tsx
     ThemeToggle.tsx   # light/dark switch (localStorage + system default)
+    OnboardingChecklist.tsx # first-run quick-start card (v1.0)
   lib/
     supabaseClient.ts # singleton Supabase client (null → demo-mode)
     providers/        # DataProvider interface + supabase / localStorage impls
@@ -257,6 +271,7 @@ supabase/
                       # 006 case-documents storage · 007 pg_cron overdue
                       # scheduler · 008 email channel · 009 telegram connect
                       # tokens · 010 hash tokens at rest · 011 recipient dedup
+                      # · 012 telegram_username/telegram_locale metadata
   functions/
     notify-telegram/  # per-user + cron Telegram/email routing + events log
     telegram-webhook/  # bot inbound webhook — /start connect_<token> flow +

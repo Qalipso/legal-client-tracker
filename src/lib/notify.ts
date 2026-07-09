@@ -17,8 +17,9 @@ export type NotifyResult = {
 };
 
 async function callFunction(
-  eventType: NotifyEventType,
+  eventType: NotifyEventType | string,
   payload: Record<string, unknown>,
+  recipientId?: string,
 ): Promise<NotifyResult> {
   const sb = getSupabase();
   if (!sb) return { skipped: true, reason: "demo-режим (Supabase не настроен)" };
@@ -36,7 +37,11 @@ async function callFunction(
       Authorization: `Bearer ${token}`,
       apikey: anonKey,
     },
-    body: JSON.stringify({ event_type: eventType, payload }),
+    body: JSON.stringify({
+      event_type: eventType,
+      payload,
+      ...(recipientId ? { recipient_id: recipientId } : {}),
+    }),
   });
   return (
     (await res.json().catch(() => null)) ?? {
@@ -62,6 +67,23 @@ export function notifyEvent(
 export async function sendTestNotification(): Promise<NotifyResult> {
   try {
     return await callFunction("test", {});
+  } catch (e) {
+    return { skipped: true, reason: String(e) };
+  }
+}
+
+// Re-sends one already-logged (failed) notification to the exact same
+// recipient it originally targeted — bypasses the enable-toggle checks on
+// the server (the original attempt already passed them), so a retry never
+// silently turns into a skip. See notify-telegram/index.ts's recipient_id
+// branch.
+export async function retryNotification(
+  eventType: string,
+  payload: Record<string, unknown>,
+  recipientId: string,
+): Promise<NotifyResult> {
+  try {
+    return await callFunction(eventType, payload, recipientId);
   } catch (e) {
     return { skipped: true, reason: String(e) };
   }

@@ -96,6 +96,8 @@ async function createRecipient(
   userId: string,
   chatId: number,
   displayName?: string,
+  username?: string,
+  locale?: string,
 ): Promise<void> {
   await fetch(
     `${SB_URL}/rest/v1/notification_recipients?on_conflict=user_id,channel,destination`,
@@ -111,6 +113,8 @@ async function createRecipient(
         channel: "telegram",
         destination: String(chatId),
         is_active: true,
+        telegram_username: username || null,
+        telegram_locale: locale || null,
       }),
     },
   );
@@ -141,13 +145,15 @@ Deno.serve(async (req: Request) => {
   const text: string = message.text ?? "";
   const firstName: string | undefined = message.from?.first_name;
   const lastName: string | undefined = message.from?.last_name;
+  const username: string | undefined = message.from?.username;
+  const locale: string | undefined = message.from?.language_code;
 
   const connectMatch = text.match(/^\/start\s+connect_([a-f0-9]+)/);
   if (connectMatch) {
     const userId = await claimConnectToken(connectMatch[1]);
     if (userId) {
       const displayName = [firstName, lastName].filter(Boolean).join(" ");
-      await createRecipient(userId, chatId, displayName);
+      await createRecipient(userId, chatId, displayName, username, locale);
       await sendMessage(chatId, "✅ Уведомления Legal Client Tracker подключены.");
     } else {
       await sendMessage(

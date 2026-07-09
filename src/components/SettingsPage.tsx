@@ -8,7 +8,7 @@ import type {
   UserRole,
 } from "../types/client";
 import type { DataProvider } from "../lib/providers";
-import { sendTestNotification } from "../lib/notify";
+import { retryNotification, sendTestNotification } from "../lib/notify";
 import { formatDateTime } from "../lib/clients";
 import { STATUS_ORDER } from "../lib/statuses";
 import { parseCsv, toCsv } from "../lib/csv";
@@ -42,6 +42,28 @@ const ROLE_LABELS: Record<UserRole, string> = {
   lawyer: "Юрист",
   assistant: "Ассистент",
 };
+
+// Translates raw provider/API error strings into something a non-technical
+// user can act on — falls back to the raw message for anything unmapped
+// rather than hiding it.
+function friendlyError(error: string): string {
+  if (error.includes("chat not found")) {
+    return "Chat не найден — получатель ещё не написал боту /start";
+  }
+  if (error.includes("bot was blocked")) {
+    return "Бот заблокирован получателем в Telegram";
+  }
+  if (/RESEND_API_KEY|RESEND_FROM_EMAIL/.test(error)) {
+    return "Email-доставка не настроена (нет ключа Resend)";
+  }
+  if (error.includes("TG_BOT_TOKEN")) {
+    return "Telegram-бот не настроен на сервере";
+  }
+  if (/^HTTP \d+/.test(error) || error === "HTTP network") {
+    return `Ошибка сети при отправке (${error})`;
+  }
+  return error;
+}
 
 const TELEGRAM_BOT_USERNAME = "legalclienttrackerbot";
 
@@ -85,6 +107,11 @@ export default function SettingsPage({
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [telegramState, setTelegramState] = useState<
+    "idle" | "connecting" | "timeout" | "error"
+  >("idle");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const isAssistant = profile?.role === "assistant";
 
@@ -268,6 +295,7 @@ export default function SettingsPage({
 
   async function connectTelegram() {
     setConnecting(true);
+    setTelegramState("connecting");
     try {
       const token = await provider.createTelegramConnectToken();
       window.open(
@@ -277,19 +305,24 @@ export default function SettingsPage({
       );
       // Poll for the new recipient — the webhook creates it once the user
       // taps Start in Telegram, which happens outside this tab.
-      const before = recipients.length;
+      const before = recipients.filter((r) => r.channel === "telegram").length;
+      let confirmed = false;
       for (let i = 0; i < 15; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         const list = await provider.listRecipients().catch(() => null);
         if (list) {
           setRecipients(list);
-          if (list.length > before) {
+          if (list.filter((r) => r.channel === "telegram").length > before) {
             onToast("Telegram подключён");
+            confirmed = true;
+            setTelegramState("idle");
             break;
           }
         }
       }
+      if (!confirmed) setTelegramState("timeout");
     } catch {
+      setTelegramState("error");
       onToast("Не удалось начать подключение Telegram");
     } finally {
       setConnecting(false);
@@ -317,7 +350,21 @@ export default function SettingsPage({
     setTesting(false);
   }
 
+  async function retryEvent(ev: NotificationEvent) {
+    if (!ev.recipientId) return;
+    setRetryingId(ev.id);
+    try {
+      const r = await retryNotification(ev.eventType, ev.payload ?? {}, ev.recipientId);
+      onToast(r.sent ? "Отправлено" : `Не удалось: ${r.reason ?? r.errors?.[0] ?? "неизвестная причина"}`);
+      setEvents(await provider.listNotificationEvents(15).catch(() => events));
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
   const activeRecipients = recipients.filter((r) => r.isActive).length;
+  const telegramRecipients = recipients.filter((r) => r.channel === "telegram");
+  const emailRecipients = recipients.filter((r) => r.channel === "email");
   const lastEvent = events[0];
 
   const toggle = (
@@ -504,137 +551,236 @@ export default function SettingsPage({
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <h2 className="text-base font-semibold">Получатели</h2>
 
-            {!isAssistant && provider.name === "supabase" && (
-              <div className="mt-3 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={connectTelegram}
-                  disabled={connecting}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-                >
-                  {connecting ? "Ждём подтверждения в Telegram…" : "📎 Подключить Telegram"}
-                </button>
+            {/* Telegram connection — primary flow, state-driven */}
+            {provider.name === "supabase" && (
+              <div className="mt-3 flex flex-col gap-2">
+                {telegramRecipients.length > 0 &&
+                  telegramRecipients.map((r) => (
+                    <div
+                      key={r.id}
+                      className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-sm dark:border-emerald-900/50 dark:bg-emerald-500/5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-medium text-emerald-800 dark:text-emerald-300">
+                            ✅ {r.isActive ? "Подключено" : "Отключено"}
+                          </span>
+                          <p className="mt-0.5 text-slate-700 dark:text-slate-300">
+                            {r.name}
+                            {r.telegramUsername && (
+                              <span className="text-slate-500 dark:text-slate-400">
+                                {" "}
+                                · @{r.telegramUsername}
+                              </span>
+                            )}
+                            <span className="text-slate-500 dark:text-slate-400"> · telegram</span>
+                            {r.telegramLocale && (
+                              <span className="text-slate-500 dark:text-slate-400">
+                                {" "}
+                                · {r.telegramLocale}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        {!isAssistant && (
+                          <div className="flex shrink-0 gap-2">
+                            <button
+                              type="button"
+                              onClick={runTest}
+                              disabled={testing}
+                              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              {testing ? "Отправка…" : "Отправить тест"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () =>
+                                setRecipients(
+                                  await provider.updateRecipient(r.id, {
+                                    isActive: !r.isActive,
+                                  }),
+                                )
+                              }
+                              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              {r.isActive ? "Отключить" : "Включить"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {testResult && (
+                        <p
+                          className={`mt-1.5 text-xs ${testResult.startsWith("✅") ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}
+                        >
+                          {testResult}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+
+                {telegramRecipients.length === 0 && telegramState === "connecting" && (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+                    Ждём подтверждения в Telegram… (нажмите Start в открывшемся чате)
+                  </div>
+                )}
+
+                {telegramRecipients.length === 0 && telegramState === "timeout" && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-300">
+                    Не получили подтверждение. Проверьте, что вы нажали Start в
+                    открывшемся чате, или{" "}
+                    <button
+                      type="button"
+                      onClick={connectTelegram}
+                      className="underline"
+                    >
+                      попробуйте снова
+                    </button>
+                    .
+                  </div>
+                )}
+
+                {telegramRecipients.length === 0 && telegramState === "error" && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
+                    Не удалось начать подключение.{" "}
+                    <button type="button" onClick={connectTelegram} className="underline">
+                      Попробовать снова
+                    </button>
+                    .
+                  </div>
+                )}
+
+                {telegramRecipients.length === 0 &&
+                  (telegramState === "idle" || telegramState === "connecting") &&
+                  !isAssistant && (
+                    <button
+                      type="button"
+                      onClick={connectTelegram}
+                      disabled={connecting}
+                      className="w-fit rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+                    >
+                      {connecting ? "Ждём подтверждения в Telegram…" : "📎 Подключить Telegram"}
+                    </button>
+                  )}
               </div>
             )}
 
-            <ul className="mt-3 flex flex-col gap-2">
-              {recipients.length === 0 && (
-                <li className="text-sm text-slate-400 dark:text-slate-500">
-                  Пока нет получателей. Нажмите «Подключить Telegram» выше,
-                  или добавьте вручную ниже (например, chat ID, полученный от{" "}
-                  <a
-                    href="https://t.me/userinfobot"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
+            {/* Email recipients — no connect flow, always manual */}
+            {emailRecipients.length > 0 && (
+              <ul className="mt-3 flex flex-col gap-2">
+                {emailRecipients.map((r) => (
+                  <li
+                    key={r.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
                   >
-                    @userinfobot
-                  </a>
-                  ).
-                </li>
-              )}
-              {recipients.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
-                >
-                  <span className={r.isActive ? "" : "text-slate-400 line-through dark:text-slate-500"}>
-                    <span className="font-medium">{r.name}</span>{" "}
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                      {r.channel === "email" ? "email" : "telegram"}
-                    </span>{" "}
-                    <span className="text-slate-500 dark:text-slate-400">· {r.destination}</span>
-                  </span>
-                  {!isAssistant && (
-                    <span className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={async () =>
-                          setRecipients(
-                            await provider.updateRecipient(r.id, {
-                              isActive: !r.isActive,
-                            }),
-                          )
-                        }
-                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        {r.isActive ? "Отключить" : "Включить"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!window.confirm(`Удалить получателя «${r.name}»?`)) return;
-                          setRecipients(await provider.deleteRecipient(r.id));
-                        }}
-                        className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/40"
-                      >
-                        Удалить
-                      </button>
+                    <span className={r.isActive ? "" : "text-slate-400 line-through dark:text-slate-500"}>
+                      <span className="font-medium">{r.name}</span>{" "}
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                        email
+                      </span>{" "}
+                      <span className="text-slate-500 dark:text-slate-400">· {r.destination}</span>
                     </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-
-            {!isAssistant && (
-              <form onSubmit={addRecipient} className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <select
-                  value={newChannel}
-                  onChange={(e) =>
-                    setNewChannel(e.target.value as "telegram" | "email")
-                  }
-                  aria-label="Канал получателя"
-                  className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
-                >
-                  <option value="telegram">Telegram</option>
-                  <option value="email">Email</option>
-                </select>
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Имя (Юрист Эдуард)"
-                  aria-label="Имя получателя"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
-                />
-                <input
-                  type="text"
-                  value={newChatId}
-                  onChange={(e) => setNewChatId(e.target.value)}
-                  placeholder={
-                    newChannel === "email" ? "Email адрес" : "Telegram chat ID"
-                  }
-                  aria-label={
-                    newChannel === "email" ? "Email адрес" : "Telegram chat ID"
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
-                />
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-                >
-                  Добавить
-                </button>
-              </form>
+                    {!isAssistant && (
+                      <span className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={async () =>
+                            setRecipients(
+                              await provider.updateRecipient(r.id, {
+                                isActive: !r.isActive,
+                              }),
+                            )
+                          }
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          {r.isActive ? "Отключить" : "Включить"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!window.confirm(`Удалить получателя «${r.name}»?`)) return;
+                            setRecipients(await provider.deleteRecipient(r.id));
+                          }}
+                          className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/40"
+                        >
+                          Удалить
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
 
-            <div className="mt-3 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={runTest}
-                disabled={testing}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                {testing ? "Отправка…" : "Отправить тест"}
-              </button>
-              {testResult && (
-                <span
-                  className={`text-sm ${testResult.startsWith("✅") ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}
+            {/* Advanced: manual entry (chat ID/email), kept for edge cases —
+                group chats, someone else's chat ID, or a fallback if the
+                connect flow doesn't work for some reason */}
+            {!isAssistant && (
+              <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 >
-                  {testResult}
-                </span>
-              )}
-            </div>
+                  {showAdvanced ? "▾" : "▸"} Дополнительно: добавить вручную
+                </button>
+                {showAdvanced && (
+                  <form onSubmit={addRecipient} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <select
+                      value={newChannel}
+                      onChange={(e) =>
+                        setNewChannel(e.target.value as "telegram" | "email")
+                      }
+                      aria-label="Канал получателя"
+                      className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
+                    >
+                      <option value="telegram">Telegram</option>
+                      <option value="email">Email</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="Имя (Юрист Эдуард)"
+                      aria-label="Имя получателя"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
+                    />
+                    <input
+                      type="text"
+                      value={newChatId}
+                      onChange={(e) => setNewChatId(e.target.value)}
+                      placeholder={
+                        newChannel === "email" ? "Email адрес" : "Telegram chat ID"
+                      }
+                      aria-label={
+                        newChannel === "email" ? "Email адрес" : "Telegram chat ID"
+                      }
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
+                    />
+                    <button
+                      type="submit"
+                      className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+                    >
+                      Добавить
+                    </button>
+                  </form>
+                )}
+                {showAdvanced && newChannel === "telegram" && (
+                  <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                    Chat ID можно узнать, написав боту{" "}
+                    <a
+                      href="https://t.me/userinfobot"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline"
+                    >
+                      @userinfobot
+                    </a>
+                    .
+                  </p>
+                )}
+              </div>
+            )}
           </section>
 
           {/* Import / export */}
@@ -697,8 +843,10 @@ export default function SettingsPage({
                   : ev.channel === "email"
                     ? "email — на почту аккаунта"
                     : null;
+                const canRetry =
+                  !isAssistant && ev.status === "error" && Boolean(ev.recipientId);
                 return (
-                  <li key={ev.id} className="flex items-center justify-between text-sm">
+                  <li key={ev.id} className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-slate-800 dark:text-slate-200">
                       {EVENT_LABELS[ev.eventType] ?? ev.eventType}
                       {recipientLabel && (
@@ -707,10 +855,22 @@ export default function SettingsPage({
                         </span>
                       )}
                       {ev.error && (
-                        <span className="ml-2 text-xs text-red-500 dark:text-red-400">{ev.error}</span>
+                        <span className="ml-2 text-xs text-red-500 dark:text-red-400">
+                          {friendlyError(ev.error)}
+                        </span>
                       )}
                     </span>
-                    <span className="flex items-center gap-2">
+                    <span className="flex shrink-0 items-center gap-2">
+                      {canRetry && (
+                        <button
+                          type="button"
+                          onClick={() => retryEvent(ev)}
+                          disabled={retryingId === ev.id}
+                          className="rounded-lg border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          {retryingId === ev.id ? "…" : "Повторить"}
+                        </button>
+                      )}
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGES[ev.status]}`}
                       >

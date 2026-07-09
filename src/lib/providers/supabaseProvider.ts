@@ -104,6 +104,8 @@ const mapRecipient = (r: Row): NotificationRecipient => ({
   channel: r.channel,
   destination: r.destination,
   isActive: r.is_active,
+  telegramUsername: r.telegram_username ?? undefined,
+  telegramLocale: r.telegram_locale ?? undefined,
 });
 
 const mapEvent = (r: Row): NotificationEvent => ({
@@ -113,6 +115,7 @@ const mapEvent = (r: Row): NotificationEvent => ({
   channel: r.channel ?? undefined,
   status: r.status,
   error: r.error ?? undefined,
+  payload: r.payload ?? undefined,
   createdAt: r.created_at,
   sentAt: r.sent_at ?? undefined,
 });

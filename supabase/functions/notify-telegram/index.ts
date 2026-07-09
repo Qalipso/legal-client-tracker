@@ -1,7 +1,13 @@
-// Notification routing — Telegram + email (v7, per-user + internal/cron
+// Notification routing — Telegram + email (v8, per-user + internal/cron
 // callers). Endpoint name/path kept as "notify-telegram" for stability (the
 // frontend + pg_cron both call this URL); it now dispatches by recipient
 // channel rather than only Telegram.
+// - `recipient_id` in the body (v1.0): retries a single failed delivery —
+//   fetches exactly that recipient (ownership-checked against the caller's
+//   own userId, never someone else's), bypasses the enable-toggle checks
+//   (the original attempt already passed them to become an "error" row —
+//   re-checking would just risk silently downgrading a retry to a skip),
+//   and dispatches to it alone rather than the full recipient list.
 // - Telegram bot token lives ONLY in Supabase secrets (TG_BOT_TOKEN)
 // - Email delivery uses the Resend API (RESEND_API_KEY + RESEND_FROM_EMAIL
 //   edge function secrets, sender must be on a Resend-verified domain) —
@@ -96,6 +102,61 @@ const EVENT_LABELS: Record<string, string> = {
   test: "Тест",
 };
 
+// Sends to one recipient over its own channel. Returns the outcome without
+// logging — callers log, since the retry path and the batch-dispatch path
+// want slightly different log rows (retry doesn't re-derive `payload` etc.).
+async function sendToRecipient(
+  r: { channel: string; destination: string },
+  eventType: string,
+  text: string,
+  token: string | undefined,
+  resendKey: string | undefined,
+  resendFrom: string | undefined,
+): Promise<{ ok: boolean; errorMsg: string | null }> {
+  if (r.channel === "telegram") {
+    if (!token) return { ok: false, errorMsg: "TG_BOT_TOKEN не задан в секретах Supabase" };
+    const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: r.destination, text }),
+    }).catch(() => null);
+    const tgBody = await tg?.json().catch(() => null);
+    const ok = Boolean(tg?.ok && tgBody?.ok);
+    return {
+      ok,
+      errorMsg: ok ? null : (tgBody?.description ?? `HTTP ${tg?.status ?? "network"}`),
+    };
+  }
+  if (r.channel === "email") {
+    if (!resendKey || !resendFrom) {
+      return {
+        ok: false,
+        errorMsg: "RESEND_API_KEY / RESEND_FROM_EMAIL не заданы в секретах Supabase",
+      };
+    }
+    const mail = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: resendFrom,
+        to: r.destination,
+        subject: EVENT_LABELS[eventType] ?? "Legal Client Tracker",
+        text,
+      }),
+    }).catch(() => null);
+    const mailBody = await mail?.json().catch(() => null);
+    const ok = Boolean(mail?.ok);
+    return {
+      ok,
+      errorMsg: ok ? null : (mailBody?.message ?? `HTTP ${mail?.status ?? "network"}`),
+    };
+  }
+  return { ok: false, errorMsg: `неизвестный канал: ${r.channel}` };
+}
+
 function buildText(eventType: string, p: Record<string, unknown>): string {
   switch (eventType) {
     case "test":
@@ -135,6 +196,7 @@ Deno.serve(async (req: Request) => {
     payload?: Record<string, unknown>;
     internal_secret?: string;
     user_id?: string;
+    recipient_id?: string;
   };
   try {
     body = await req.json();
@@ -153,6 +215,37 @@ Deno.serve(async (req: Request) => {
     userId = await getUserId(req);
   }
   if (!userId) return json({ error: "unauthorized" }, 401);
+
+  // Retry: resend to exactly one already-known recipient, regardless of
+  // current toggle state (see header comment).
+  if (body.recipient_id) {
+    const rows = await select(
+      `notification_recipients?id=eq.${body.recipient_id}&user_id=eq.${userId}&select=id,channel,destination`,
+    );
+    const recipient = rows[0];
+    if (!recipient) return json({ error: "recipient not found" }, 404);
+
+    const text = buildText(eventType, payload);
+    const { ok, errorMsg } = await sendToRecipient(
+      recipient,
+      eventType,
+      text,
+      Deno.env.get("TG_BOT_TOKEN"),
+      Deno.env.get("RESEND_API_KEY"),
+      Deno.env.get("RESEND_FROM_EMAIL"),
+    );
+    await logEvent({
+      user_id: userId,
+      event_type: eventType,
+      recipient_id: recipient.id,
+      channel: recipient.channel,
+      status: ok ? "sent" : "error",
+      error: ok ? null : errorMsg,
+      payload,
+      sent_at: ok ? new Date().toISOString() : null,
+    });
+    return json({ sent: ok, delivered: ok ? 1 : 0, failed: ok ? 0 : 1, errors: errorMsg ? [errorMsg] : [] });
+  }
 
   const skip = async (reason: string) => {
     await logEvent({
@@ -227,49 +320,14 @@ Deno.serve(async (req: Request) => {
   const errors: string[] = [];
 
   for (const r of recipients) {
-    let ok = false;
-    let errorMsg: string | null = null;
-
-    if (r.channel === "telegram") {
-      if (!token) {
-        errorMsg = "TG_BOT_TOKEN не задан в секретах Supabase";
-      } else {
-        const tg = await fetch(
-          `https://api.telegram.org/bot${token}/sendMessage`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: r.destination, text }),
-          },
-        ).catch(() => null);
-        const tgBody = await tg?.json().catch(() => null);
-        ok = Boolean(tg?.ok && tgBody?.ok);
-        if (!ok) errorMsg = tgBody?.description ?? `HTTP ${tg?.status ?? "network"}`;
-      }
-    } else if (r.channel === "email") {
-      if (!resendKey || !resendFrom) {
-        errorMsg = "RESEND_API_KEY / RESEND_FROM_EMAIL не заданы в секретах Supabase";
-      } else {
-        const mail = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${resendKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: resendFrom,
-            to: r.destination,
-            subject: EVENT_LABELS[eventType] ?? "Legal Client Tracker",
-            text,
-          }),
-        }).catch(() => null);
-        const mailBody = await mail?.json().catch(() => null);
-        ok = Boolean(mail?.ok);
-        if (!ok) errorMsg = mailBody?.message ?? `HTTP ${mail?.status ?? "network"}`;
-      }
-    } else {
-      errorMsg = `неизвестный канал: ${r.channel}`;
-    }
+    const { ok, errorMsg } = await sendToRecipient(
+      r,
+      eventType,
+      text,
+      token,
+      resendKey,
+      resendFrom,
+    );
 
     if (ok) delivered++;
     else {
