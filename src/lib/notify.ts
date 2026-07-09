@@ -13,6 +13,7 @@ export type NotifyResult = {
   reason?: string;
   delivered?: number;
   failed?: number;
+  errors?: string[];
 };
 
 async function callFunction(

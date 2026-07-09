@@ -143,6 +143,7 @@ Deno.serve(async (req: Request) => {
   const text = buildText(eventType, payload);
   let delivered = 0;
   let failed = 0;
+  const errors: string[] = [];
 
   for (const r of recipients) {
     const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -152,7 +153,11 @@ Deno.serve(async (req: Request) => {
     }).catch(() => null);
     const tgBody = await tg?.json().catch(() => null);
     const ok = Boolean(tg?.ok && tgBody?.ok);
-    ok ? delivered++ : failed++;
+    if (ok) delivered++;
+    else {
+      failed++;
+      errors.push(tgBody?.description ?? `HTTP ${tg?.status ?? "network"}`);
+    }
     await logEvent({
       user_id: userId,
       event_type: eventType,
@@ -165,5 +170,5 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  return json({ sent: delivered > 0, delivered, failed });
+  return json({ sent: delivered > 0, delivered, failed, errors });
 });

@@ -106,10 +106,18 @@ export default function SettingsPage({
     setTesting(true);
     setTestResult(null);
     const r = await sendTestNotification();
+    const failReason =
+      r.reason ??
+      r.errors?.[0] ??
+      (r.errors?.length === 0 ? undefined : "неизвестная причина");
     setTestResult(
       r.sent
         ? `✅ Отправлено (доставлено: ${r.delivered ?? 1})`
-        : `Не отправлено: ${r.reason ?? "неизвестная причина"}`,
+        : `Не отправлено: ${failReason}${
+            r.errors?.[0]?.includes("chat not found")
+              ? " — напишите боту любое сообщение (боты не могут писать первыми) и проверьте chat ID"
+              : ""
+          }`,
     );
     setEvents(await provider.listNotificationEvents(15).catch(() => events));
     setTesting(false);
