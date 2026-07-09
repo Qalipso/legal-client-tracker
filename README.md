@@ -10,6 +10,13 @@
 
 [link — pending deploy]
 
+## Документация
+
+- [docs/architecture.md](docs/architecture.md) — компоненты, data model, потоки, решения (ADR) и trade-offs
+- [docs/setup.md](docs/setup.md) — локальный запуск, Supabase с нуля, Telegram-бот, Vercel deploy
+- [docs/notifications.md](docs/notifications.md) — контракт edge function, события, журнал доставки
+- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v0.3
+
 ## Features
 
 **Board / Table**
@@ -107,19 +114,28 @@ npm run build    # production build → dist/
 ```
 src/
   components/
-    BoardView.tsx     # kanban columns + case cards (next action, overdue)
-    ClientDetails.tsx # side panel: info, timeline, notes, tasks, files, status history
+    AuthPage.tsx      # login / signup
+    BoardView.tsx     # kanban columns + case cards, drag-and-drop
+    ClientDetails.tsx # drawer: info, edit, timeline, notes, tasks, files
     ClientForm.tsx    # add-client form with validation
-    ClientTable.tsx   # table view + status select + delete
+    ClientTable.tsx   # table view
+    SettingsPage.tsx  # profile, notification toggles, recipients, history
     StatusCards.tsx   # counters per status
     Filters.tsx       # search + status filter
-    Toast.tsx         # notifications
+    Toast.tsx
   lib/
-    clients.ts        # storage layer: AppData load/save, migration, seed, helpers
-    statuses.ts       # status labels, order, badge styles
-  types/
-    client.ts         # Client / CaseHistoryItem / Task / Attachment / AppData
-  App.tsx             # state owner: data, view mode, selection, all mutations
+    supabaseClient.ts # singleton Supabase client (null → demo-mode)
+    providers/        # DataProvider interface + supabase / localStorage impls
+    notify.ts         # fire-and-forget event notifications (user JWT)
+    clients.ts        # date/overdue/next-task helpers
+    statuses.ts       # status labels, order, visual identity
+  types/client.ts     # domain types
+  App.tsx             # AuthGate + hash routing + state owner
+supabase/
+  migrations/         # 001 schema · 002 settings (superseded) · 003 auth+RLS
+  functions/notify-telegram/  # per-user Telegram routing + events log
+  seed.sql
+docs/                 # architecture · setup · notifications
 ```
 
 ## Data model
