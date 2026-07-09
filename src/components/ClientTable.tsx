@@ -7,6 +7,7 @@ type Props = {
   totalCount: number;
   onStatusChange: (id: string, status: ClientStatus) => void;
   onDelete: (id: string) => void;
+  onOpenClient: (id: string) => void;
 };
 
 export default function ClientTable({
@@ -14,6 +15,7 @@ export default function ClientTable({
   totalCount,
   onStatusChange,
   onDelete,
+  onOpenClient,
 }: Props) {
   if (totalCount === 0) {
     return (
@@ -47,8 +49,14 @@ export default function ClientTable({
         <tbody className="divide-y divide-slate-100">
           {clients.map((client) => (
             <tr key={client.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-medium text-slate-900">
-                {client.name}
+              <td className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => onOpenClient(client.id)}
+                  className="font-medium text-slate-900 underline-offset-2 hover:underline"
+                >
+                  {client.name}
+                </button>
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-slate-600">
                 {client.phone}
