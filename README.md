@@ -1,6 +1,6 @@
-<img src="docs/screenshots/mascot-elly-avatar.jpg" alt="Элли — маскот Legal Client Tracker" width="120" align="left" />
-
 # Legal Client Tracker — lightweight legal CRM
+
+<img src="docs/screenshots/mascot-elly-avatar.jpg" alt="Элли — маскот Legal Client Tracker" width="120" align="left" />
 
 Не просто таблица клиентов, а **case management board**: юрист работает не со строками,
 а с делами — открывает клиента, видит историю, документы, заметки, текущий статус и
@@ -8,11 +8,11 @@
 
 Клиент пришёл → дело взяли в работу → запросили документы → ждём клиента → закрыли дело.
 
-<br clear="left" />
-
 Знакомьтесь — **Элли**, бот-ассистентка проекта: следит за просроченными сроками
 и уведомляет о новых клиентах и смене статуса дела в Telegram, чтобы дело не
-терялось в переписке (подробнее — [docs/brand/elly-character.md](docs/brand/elly-character.md)).
+терялось в переписке.
+
+<br clear="left" />
 
 <img src="docs/screenshots/mascot-elly-desk.jpg" alt="Элли за рабочим столом юриста" width="100%" />
 
