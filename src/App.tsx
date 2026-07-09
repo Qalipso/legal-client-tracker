@@ -313,7 +313,7 @@ function MainApp() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-[1600px] px-4 py-8 sm:px-8">
         <header className="flex flex-col gap-4 pb-6">
           {/* stacks on mobile — chip + 3-button group used to squeeze onto
               one row and wrap ("+ Добавить\nклиента" across 3 lines) */}
@@ -361,7 +361,7 @@ function MainApp() {
           </div>
         </header>
 
-        <main className="flex flex-col gap-8 border-t border-slate-200 pt-8 dark:border-slate-800">
+        <main className="flex flex-col gap-6 border-t border-slate-200 pt-6 dark:border-slate-800">
           {loading && (
             <p className="py-16 text-center text-sm text-slate-400 dark:text-slate-500">
               Загрузка данных…
