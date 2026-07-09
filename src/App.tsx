@@ -196,12 +196,12 @@ function MainApp() {
 
   function handleAddAttachment(
     clientId: string,
-    fileName: string,
+    file: File,
     documentType?: string,
     documentStatus?: string,
   ) {
-    void run(
-      provider.addAttachment(clientId, fileName, documentType, documentStatus),
+    return run(
+      provider.addAttachment(clientId, file, documentType, documentStatus),
       "Документ прикреплён",
     );
   }
@@ -464,6 +464,7 @@ function MainApp() {
           onAddTask={handleAddTask}
           onToggleTask={handleToggleTask}
           onAddAttachment={handleAddAttachment}
+          onGetAttachmentUrl={(a) => provider.getAttachmentUrl(a)}
           onAddDeadline={handleAddDeadline}
           onToggleDeadline={handleToggleDeadline}
           onAddRisk={handleAddRisk}

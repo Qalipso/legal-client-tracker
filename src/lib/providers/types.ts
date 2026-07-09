@@ -1,6 +1,7 @@
 import type {
   AccountSettings,
   AppData,
+  Attachment,
   ClientPatch,
   ClientStatus,
   NewClientInput,
@@ -29,10 +30,13 @@ export interface DataProvider {
   toggleTask(taskId: string): Promise<AppData>;
   addAttachment(
     clientId: string,
-    fileName: string,
+    file: File,
     documentType?: string,
     documentStatus?: string,
   ): Promise<AppData>;
+  // resolves a short-lived signed URL for a private case-document upload
+  // (localStorage demo-mode returns the stored data URL directly)
+  getAttachmentUrl(attachment: Attachment): Promise<string | null>;
 
   // matter model (v0.4): key deadlines + open risks per client
   getReferenceData(): Promise<ReferenceData>;

@@ -454,19 +454,41 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
 
     async addAttachment(
       clientId: string,
-      fileName: string,
+      file: File,
       documentType?: string,
       documentStatus?: string,
     ) {
+      const { data: auth } = await sb.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("not authenticated");
+
+      const attachmentId = crypto.randomUUID();
+      const storagePath = `${uid}/${clientId}/${attachmentId}-${file.name}`;
+      const { error: uploadError } = await sb.storage
+        .from("case-documents")
+        .upload(storagePath, file, { upsert: false });
+      if (uploadError) throw uploadError;
+
       const { error } = await sb.from("attachments").insert({
+        id: attachmentId,
         client_id: clientId,
-        file_name: fileName,
+        file_name: file.name,
+        storage_path: storagePath,
         document_type: documentType || null,
         document_status: documentStatus || null,
       });
       if (error) throw error;
-      await logEvent(clientId, "attachment_added", `Документ: ${fileName}`);
+      await logEvent(clientId, "attachment_added", `Документ: ${file.name}`);
       return fetchAll();
+    },
+
+    async getAttachmentUrl(attachment) {
+      if (!attachment.storagePath) return null;
+      const { data, error } = await sb.storage
+        .from("case-documents")
+        .createSignedUrl(attachment.storagePath, 60); // 60s — just enough to open/download
+      if (error) return null;
+      return data.signedUrl;
     },
 
     async getReferenceData(): Promise<ReferenceData> {

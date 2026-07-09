@@ -12,6 +12,7 @@ import { sendTestNotification } from "../lib/notify";
 import { formatDateTime } from "../lib/clients";
 import { STATUS_ORDER } from "../lib/statuses";
 import { parseCsv, toCsv } from "../lib/csv";
+import { downloadIcs, toIcs } from "../lib/ics";
 
 type Props = {
   provider: DataProvider;
@@ -146,6 +147,36 @@ export default function SettingsPage({
       a.click();
       URL.revokeObjectURL(url);
       onToast(`Экспортировано ${rows.length} клиентов`);
+    });
+  }
+
+  function exportCalendar() {
+    provider.fetchAll().then((data) => {
+      const clientName = (clientId: string) =>
+        data.clients.find((c) => c.id === clientId)?.name ?? "";
+      const openTasks = data.tasks
+        .filter((t) => t.dueDate && !t.completed)
+        .map((t) => ({
+          id: `task-${t.id}`,
+          dueDate: t.dueDate!,
+          title: `${t.title} — ${clientName(t.clientId)}`,
+        }));
+      const openDeadlines = data.deadlines
+        .filter((d) => !d.completed)
+        .map((d) => ({
+          id: `deadline-${d.id}`,
+          dueDate: d.dueDate,
+          title: `${d.title} — ${clientName(d.clientId)}`,
+          description: "Контрольный срок по делу",
+        }));
+      const items = [...openTasks, ...openDeadlines];
+      const ics = toIcs(items, "Legal Client Tracker — сроки и задачи");
+      downloadIcs(ics, `legal-client-tracker-${new Date().toISOString().slice(0, 10)}.ics`);
+      onToast(
+        items.length > 0
+          ? `Экспортировано ${items.length} событий в календарь`
+          : "Нет открытых задач/сроков для экспорта",
+      );
     });
   }
 
@@ -559,6 +590,22 @@ export default function SettingsPage({
               {importSummary && (
                 <span className="text-sm text-slate-600">{importSummary}</span>
               )}
+            </div>
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={exportCalendar}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                📅 Экспорт сроков и задач (.ics)
+              </button>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Скачивает открытые задачи и контрольные сроки как .ics —
+                импортируйте в Google Calendar (Настройки → Импорт и экспорт
+                → Импорт) или любой другой календарь. Это разовый экспорт,
+                не живая синхронизация — для двусторонней синхронизации
+                нужен Google OAuth (см. Next steps в README).
+              </p>
             </div>
           </section>
 

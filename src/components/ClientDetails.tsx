@@ -32,10 +32,11 @@ type Props = {
   onToggleTask: (taskId: string) => void;
   onAddAttachment: (
     clientId: string,
-    fileName: string,
+    file: File,
     documentType?: string,
     documentStatus?: string,
-  ) => void;
+  ) => Promise<void>;
+  onGetAttachmentUrl: (attachment: Attachment) => Promise<string | null>;
   onAddDeadline: (
     clientId: string,
     title: string,
@@ -763,12 +764,26 @@ function DocumentsSection({
   attachments,
   referenceData,
   onAddAttachment,
+  onGetAttachmentUrl,
 }: Props) {
   const [docType, setDocType] = useState("");
   const [docStatus, setDocStatus] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const clientAttachments = attachments.filter(
     (a) => a.clientId === client.id,
   );
+
+  async function openAttachment(a: Attachment) {
+    setOpeningId(a.id);
+    try {
+      const url = await onGetAttachmentUrl(a);
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setOpeningId(null);
+    }
+  }
+
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -780,8 +795,16 @@ function DocumentsSection({
         )}
         {clientAttachments.map((a) => (
           <li key={a.id} className="flex items-center justify-between text-sm">
-            <span className="text-slate-800">
+            <button
+              type="button"
+              onClick={() => openAttachment(a)}
+              disabled={openingId === a.id}
+              className="text-left text-slate-800 hover:underline disabled:opacity-50"
+            >
               📎 {a.fileName}
+              {openingId === a.id && (
+                <span className="ml-1 text-xs text-slate-400">открываю…</span>
+              )}
               {a.documentType && (
                 <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                   {label(referenceData.documentTypes, a.documentType)}
@@ -792,7 +815,7 @@ function DocumentsSection({
                   {label(referenceData.documentStatuses, a.documentStatus)}
                 </span>
               )}
-            </span>
+            </button>
             <span className="text-xs text-slate-400">
               {formatDate(a.uploadedAt)}
             </span>
@@ -827,21 +850,26 @@ function DocumentsSection({
           ))}
         </select>
         <label className="inline-block cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-          Прикрепить файл
+          {uploading ? "Загрузка…" : "Прикрепить файл"}
           <input
             type="file"
             className="hidden"
-            onChange={(e) => {
+            disabled={uploading}
+            onChange={async (e) => {
               const file = e.target.files?.[0];
-              if (file) {
-                onAddAttachment(
+              e.target.value = "";
+              if (!file) return;
+              setUploading(true);
+              try {
+                await onAddAttachment(
                   client.id,
-                  file.name,
+                  file,
                   docType || undefined,
                   docStatus || undefined,
                 );
+              } finally {
+                setUploading(false);
               }
-              e.target.value = "";
             }}
           />
         </label>

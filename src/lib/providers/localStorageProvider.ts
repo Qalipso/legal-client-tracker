@@ -504,30 +504,47 @@ export const localStorageProvider: DataProvider = {
       ),
     ),
 
-  addAttachment: (
+  async addAttachment(
     clientId: string,
-    fileName: string,
+    file: File,
     documentType?: string,
     documentStatus?: string,
-  ) =>
-    mutate((data) => ({
+  ) {
+    // demo-mode: small files get a real data URL (openable/downloadable);
+    // larger ones just keep the name, to avoid blowing localStorage's quota
+    const DEMO_MAX_BYTES = 2 * 1024 * 1024;
+    const dataUrl =
+      file.size <= DEMO_MAX_BYTES
+        ? await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }).catch(() => undefined)
+        : undefined;
+
+    return mutate((data) => ({
       ...data,
       attachments: [
         ...data.attachments,
         {
           id: crypto.randomUUID(),
           clientId,
-          fileName,
+          fileName: file.name,
+          fileUrl: dataUrl,
           documentType,
           documentStatus,
           uploadedAt: new Date().toISOString(),
         },
       ],
       history: [
-        historyItem(clientId, "attachment_added", `Документ: ${fileName}`),
+        historyItem(clientId, "attachment_added", `Документ: ${file.name}`),
         ...data.history,
       ],
-    })).then(visible),
+    })).then(visible);
+  },
+
+  getAttachmentUrl: (attachment) => Promise.resolve(attachment.fileUrl ?? null),
 
   getReferenceData: () => Promise.resolve(DEMO_REFERENCE_DATA),
 
