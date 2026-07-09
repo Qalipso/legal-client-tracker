@@ -27,3 +27,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# generated brand renders — large binaries, regenerate from docs/brand/*.md prompts
+docs/brand/renders/
