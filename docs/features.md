@@ -103,6 +103,7 @@
 | RLS на всех пользовательских таблицах | v0.3 | migrations 003–005 |
 | Единый Supabase-клиент (singleton) | v0.5.1 fix | `src/lib/supabaseClient.ts` |
 | Vercel production deploy | v0.5.3 | `https://legal-client-tracker.vercel.app` |
+| Светлая/тёмная тема — 2 цветовые схемы, переключатель, localStorage + system-preference, без флеша при загрузке | v0.7 | `src/lib/theme.ts`, `ThemeToggle.tsx`, `index.html` inline script |
 
 ## 9. Тестирование
 

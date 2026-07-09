@@ -125,7 +125,8 @@ Dashboard → Authentication → Add user, автоподтверждён).
 ## Stack
 
 - React 19 + TypeScript (Vite)
-- Tailwind CSS v4
+- Tailwind CSS v4 — светлая/тёмная тема (`.dark` класс, localStorage +
+  system-preference по умолчанию), переключатель в шапке
 - **Supabase (PostgreSQL)** — основное хранилище; схема в `supabase/migrations/`
 - **localStorage fallback** — demo/dev-режим, если Supabase env не задан
 - **Vercel** — прод задеплоен: https://legal-client-tracker.vercel.app
@@ -181,6 +182,7 @@ src/
     StatusCards.tsx   # counters per status
     Filters.tsx       # search + status filter
     Toast.tsx
+    ThemeToggle.tsx   # light/dark switch (localStorage + system default)
   lib/
     supabaseClient.ts # singleton Supabase client (null → demo-mode)
     providers/        # DataProvider interface + supabase / localStorage impls
@@ -188,7 +190,8 @@ src/
     clients.ts        # date/overdue/next-task helpers
     csv.ts            # minimal CSV parse/serialize (no dependency)
     matterReference.ts # static reference dictionaries for demo-mode
-    statuses.ts       # status labels, order, visual identity
+    statuses.ts       # status labels, order, visual identity (incl. dark variants)
+    theme.ts          # light/dark theme store
   types/client.ts     # domain types
   App.tsx             # AuthGate + hash routing + state owner
 supabase/

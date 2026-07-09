@@ -76,23 +76,23 @@ export default function ClientDetails(props: Props) {
     <>
       {/* backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-slate-900/30"
+        className="fixed inset-0 z-40 bg-slate-900/30 dark:bg-black/50"
         onClick={onClose}
         aria-hidden="true"
       />
       <aside
         role="dialog"
         aria-label={`Карточка дела: ${client.name}`}
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-y-auto bg-white shadow-2xl lg:max-w-xl xl:max-w-2xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-y-auto bg-white shadow-2xl lg:max-w-xl xl:max-w-2xl dark:bg-slate-900"
       >
         {/* header */}
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white p-4">
+        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 {client.matterTitle || client.name}
               </h2>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 {client.matterTitle ? client.name : client.phone}
               </p>
             </div>
@@ -103,8 +103,8 @@ export default function ClientDetails(props: Props) {
                 aria-pressed={editing}
                 className={`rounded-lg border px-2.5 py-1 text-sm ${
                   editing
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                    ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                 }`}
               >
                 {editing ? "Просмотр" : "Редактировать"}
@@ -113,7 +113,7 @@ export default function ClientDetails(props: Props) {
                 type="button"
                 onClick={onClose}
                 aria-label="Закрыть карточку"
-                className="rounded-lg border border-slate-200 px-2.5 py-1 text-sm text-slate-500 hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-sm text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
               >
                 ✕
               </button>
@@ -134,7 +134,7 @@ export default function ClientDetails(props: Props) {
                 props.onStatusChange(client.id, e.target.value as ClientStatus)
               }
               aria-label="Изменить статус дела"
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-slate-400"
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               {STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>
@@ -173,7 +173,7 @@ export default function ClientDetails(props: Props) {
           <button
             type="button"
             onClick={() => props.onDelete(client.id)}
-            className="mt-2 self-start rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            className="mt-2 self-start rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/40"
           >
             Удалить клиента
           </button>
@@ -196,38 +196,38 @@ function MatterSummarySection({ client, referenceData }: Props) {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Сводка дела
       </h3>
       {!hasMatterData ? (
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">
           Данные дела не заполнены — нажмите «Редактировать».
         </p>
       ) : (
         <div className="mt-2 flex flex-col gap-2">
           <div className="flex flex-wrap gap-1.5">
             {client.matterType && (
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {label(referenceData.matterTypes, client.matterType)}
               </span>
             )}
             {client.stage && (
-              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
                 {label(referenceData.matterStages, client.stage)}
               </span>
             )}
             {client.priority && (
-              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                 Приоритет: {PRIORITY_LABELS[client.priority]}
               </span>
             )}
           </div>
           {client.matterSubject && (
-            <p className="text-sm text-slate-800">{client.matterSubject}</p>
+            <p className="text-sm text-slate-800 dark:text-slate-200">{client.matterSubject}</p>
           )}
           {client.keyDeadline && (
             <p
-              className={`text-sm font-medium ${deadlineOverdue ? "text-red-600" : "text-slate-700"}`}
+              className={`text-sm font-medium ${deadlineOverdue ? "text-red-600 dark:text-red-400" : "text-slate-700 dark:text-slate-300"}`}
             >
               Контрольный срок: {formatDate(client.keyDeadline)}
               {deadlineOverdue && " · просрочен"}
@@ -243,26 +243,26 @@ function MatterSummarySection({ client, referenceData }: Props) {
 function PartiesSection({ client }: Props) {
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Стороны
       </h3>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 p-3">
-          <p className="text-xs font-medium text-slate-400">Доверитель</p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <p className="text-xs font-medium text-slate-400 dark:text-slate-500">Доверитель</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
             {client.name}
           </p>
-          <p className="text-sm text-slate-600">{client.phone}</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{client.phone}</p>
           {client.email && (
-            <p className="text-sm text-slate-600">{client.email}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{client.email}</p>
           )}
           {client.telegram && (
-            <p className="text-sm text-slate-600">TG: {client.telegram}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">TG: {client.telegram}</p>
           )}
         </div>
-        <div className="rounded-lg border border-slate-200 p-3">
-          <p className="text-xs font-medium text-slate-400">Контрагент</p>
-          <p className="mt-1 text-sm text-slate-800">
+        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <p className="text-xs font-medium text-slate-400 dark:text-slate-500">Контрагент</p>
+          <p className="mt-1 text-sm text-slate-800 dark:text-slate-200">
             {client.counterparty || "—"}
           </p>
         </div>
@@ -271,14 +271,14 @@ function PartiesSection({ client }: Props) {
         <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
           {client.responsibleLawyer && (
             <>
-              <dt className="text-slate-500">Ответственный</dt>
-              <dd className="text-slate-900">{client.responsibleLawyer}</dd>
+              <dt className="text-slate-500 dark:text-slate-400">Ответственный</dt>
+              <dd className="text-slate-900 dark:text-slate-100">{client.responsibleLawyer}</dd>
             </>
           )}
           {client.note && (
             <>
-              <dt className="text-slate-500">Комментарий</dt>
-              <dd className="text-slate-900">{client.note}</dd>
+              <dt className="text-slate-500 dark:text-slate-400">Комментарий</dt>
+              <dd className="text-slate-900 dark:text-slate-100">{client.note}</dd>
             </>
           )}
         </dl>
@@ -322,7 +322,7 @@ function EditForm({
     <div>
       <label
         htmlFor={`edit-${key}`}
-        className="mb-1 block text-sm font-medium text-slate-700"
+        className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
       >
         {label}
       </label>
@@ -331,7 +331,7 @@ function EditForm({
         type={type}
         value={form[key]}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
       />
     </div>
   );
@@ -344,7 +344,7 @@ function EditForm({
     <div>
       <label
         htmlFor={`edit-${key}`}
-        className="mb-1 block text-sm font-medium text-slate-700"
+        className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
       >
         {labelText}
       </label>
@@ -352,7 +352,7 @@ function EditForm({
         id={`edit-${key}`}
         value={form[key]}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
       >
         <option value="">Не задан</option>
         {options.map((o) => (
@@ -389,7 +389,7 @@ function EditForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Сводка дела
       </h3>
       {field("Название дела", "matterTitle")}
@@ -403,7 +403,7 @@ function EditForm({
         <div>
           <label
             htmlFor="edit-priority"
-            className="mb-1 block text-sm font-medium text-slate-700"
+            className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
           >
             Приоритет
           </label>
@@ -416,7 +416,7 @@ function EditForm({
                 priority: e.target.value as ClientPriority | "",
               }))
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
           >
             <option value="">Не задан</option>
             {(Object.keys(PRIORITY_LABELS) as ClientPriority[]).map((p) => (
@@ -428,7 +428,7 @@ function EditForm({
         </div>
       </div>
 
-      <h3 className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Стороны
       </h3>
       {field("Имя доверителя *", "name")}
@@ -442,18 +442,18 @@ function EditForm({
       </div>
       {field("Ответственный юрист", "responsibleLawyer")}
       {field("Комментарий", "note")}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
       <div className="flex gap-2">
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
         >
           Сохранить
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           Отмена
         </button>
@@ -479,12 +479,12 @@ function TasksSection({ client, tasks, onAddTask, onToggleTask }: Props) {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Следующие действия
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
         {clientTasks.length === 0 && (
-          <li className="text-sm text-slate-400">Нет задач</li>
+          <li className="text-sm text-slate-400 dark:text-slate-500">Нет задач</li>
         )}
         {clientTasks.map((task) => {
           const overdue = isOverdue(task);
@@ -495,13 +495,13 @@ function TasksSection({ client, tasks, onAddTask, onToggleTask }: Props) {
                 checked={task.completed}
                 onChange={() => onToggleTask(task.id)}
                 aria-label={`Задача: ${task.title}`}
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-slate-300 dark:border-slate-600"
               />
               <span
                 className={
                   task.completed
-                    ? "text-slate-400 line-through"
-                    : "text-slate-800"
+                    ? "text-slate-400 line-through dark:text-slate-500"
+                    : "text-slate-800 dark:text-slate-200"
                 }
               >
                 {task.title}
@@ -509,7 +509,9 @@ function TasksSection({ client, tasks, onAddTask, onToggleTask }: Props) {
               {task.dueDate && (
                 <span
                   className={`ml-auto whitespace-nowrap text-xs ${
-                    overdue ? "font-medium text-red-600" : "text-slate-400"
+                    overdue
+                      ? "font-medium text-red-600 dark:text-red-400"
+                      : "text-slate-400 dark:text-slate-500"
                   }`}
                 >
                   до {formatDate(task.dueDate)}
@@ -527,18 +529,18 @@ function TasksSection({ client, tasks, onAddTask, onToggleTask }: Props) {
           onChange={(e) => setTaskTitle(e.target.value)}
           placeholder="Позвонить клиенту…"
           aria-label="Новая задача"
-          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
         />
         <input
           type="date"
           value={taskDue}
           onChange={(e) => setTaskDue(e.target.value)}
           aria-label="Срок задачи"
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-600"
         />
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
         >
           +
         </button>
@@ -573,12 +575,12 @@ function DeadlinesSection({
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Контрольные сроки
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
         {clientDeadlines.length === 0 && (
-          <li className="text-sm text-slate-400">Нет контрольных сроков</li>
+          <li className="text-sm text-slate-400 dark:text-slate-500">Нет контрольных сроков</li>
         )}
         {clientDeadlines.map((d) => {
           const overdue = !d.completed && new Date(`${d.dueDate}T23:59:59`) < new Date();
@@ -589,23 +591,23 @@ function DeadlinesSection({
                 checked={d.completed}
                 onChange={() => onToggleDeadline(d.id)}
                 aria-label={`Срок: ${d.title}`}
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-slate-300 dark:border-slate-600"
               />
               <span
                 className={
-                  d.completed ? "text-slate-400 line-through" : "text-slate-800"
+                  d.completed ? "text-slate-400 line-through dark:text-slate-500" : "text-slate-800 dark:text-slate-200"
                 }
               >
                 {d.title}
                 {d.deadlineType && (
-                  <span className="ml-1.5 text-xs text-slate-400">
+                  <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
                     ({label(referenceData.deadlineTypes, d.deadlineType)})
                   </span>
                 )}
               </span>
               <span
                 className={`ml-auto whitespace-nowrap text-xs ${
-                  overdue ? "font-medium text-red-600" : "text-slate-400"
+                  overdue ? "font-medium text-red-600 dark:text-red-400" : "text-slate-400 dark:text-slate-500"
                 }`}
               >
                 до {formatDate(d.dueDate)}
@@ -623,7 +625,7 @@ function DeadlinesSection({
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Подать апелляцию…"
             aria-label="Новый контрольный срок"
-            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
           />
           <input
             type="date"
@@ -631,7 +633,7 @@ function DeadlinesSection({
             onChange={(e) => setDueDate(e.target.value)}
             aria-label="Дата срока"
             required
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-600"
           />
         </div>
         <div className="flex gap-2">
@@ -639,7 +641,7 @@ function DeadlinesSection({
             value={type}
             onChange={(e) => setType(e.target.value)}
             aria-label="Тип срока"
-            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-600"
           >
             <option value="">Тип срока (необязательно)</option>
             {referenceData.deadlineTypes.map((t) => (
@@ -650,7 +652,7 @@ function DeadlinesSection({
           </select>
           <button
             type="submit"
-            className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+            className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
           >
             +
           </button>
@@ -676,12 +678,12 @@ function RisksSection({ client, risks, onAddRisk, onResolveRisk }: Props) {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Риски / открытые вопросы
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
         {clientRisks.length === 0 && (
-          <li className="text-sm text-slate-400">Нет открытых вопросов</li>
+          <li className="text-sm text-slate-400 dark:text-slate-500">Нет открытых вопросов</li>
         )}
         {clientRisks.map((r) => (
           <li key={r.id} className="flex items-start gap-2 text-sm">
@@ -690,13 +692,13 @@ function RisksSection({ client, risks, onAddRisk, onResolveRisk }: Props) {
               checked={r.isResolved}
               onChange={() => onResolveRisk(r.id)}
               aria-label={`Риск: ${r.text}`}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-slate-600"
             />
             <span
               className={
                 r.isResolved
-                  ? "text-slate-400 line-through"
-                  : "text-slate-800"
+                  ? "text-slate-400 line-through dark:text-slate-500"
+                  : "text-slate-800 dark:text-slate-200"
               }
             >
               {r.text}
@@ -711,11 +713,11 @@ function RisksSection({ client, risks, onAddRisk, onResolveRisk }: Props) {
           onChange={(e) => setText(e.target.value)}
           placeholder="Контрагент может оспорить условие…"
           aria-label="Новый риск"
-          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
         />
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
         >
           +
         </button>
@@ -736,7 +738,7 @@ function NoteSection({ client, onAddNote }: Props) {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Добавить заметку
       </h3>
       <form onSubmit={submitNote} className="mt-2 flex gap-2">
@@ -746,11 +748,11 @@ function NoteSection({ client, onAddNote }: Props) {
           onChange={(e) => setNote(e.target.value)}
           placeholder="Клиент просит проверить договор до пятницы…"
           aria-label="Новая заметка"
-          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+          className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
         />
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+          className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
         >
           +
         </button>
@@ -786,12 +788,12 @@ function DocumentsSection({
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
         Документы
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
         {clientAttachments.length === 0 && (
-          <li className="text-sm text-slate-400">Нет документов</li>
+          <li className="text-sm text-slate-400 dark:text-slate-500">Нет документов</li>
         )}
         {clientAttachments.map((a) => (
           <li key={a.id} className="flex items-center justify-between text-sm">
@@ -799,24 +801,24 @@ function DocumentsSection({
               type="button"
               onClick={() => openAttachment(a)}
               disabled={openingId === a.id}
-              className="text-left text-slate-800 hover:underline disabled:opacity-50"
+              className="text-left text-slate-800 hover:underline disabled:opacity-50 dark:text-slate-200"
             >
               📎 {a.fileName}
               {openingId === a.id && (
-                <span className="ml-1 text-xs text-slate-400">открываю…</span>
+                <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">открываю…</span>
               )}
               {a.documentType && (
-                <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {label(referenceData.documentTypes, a.documentType)}
                 </span>
               )}
               {a.documentStatus && (
-                <span className="ml-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                <span className="ml-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
                   {label(referenceData.documentStatuses, a.documentStatus)}
                 </span>
               )}
             </button>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-400 dark:text-slate-500">
               {formatDate(a.uploadedAt)}
             </span>
           </li>
@@ -827,7 +829,7 @@ function DocumentsSection({
           value={docType}
           onChange={(e) => setDocType(e.target.value)}
           aria-label="Тип документа"
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-600"
         >
           <option value="">Тип документа</option>
           {referenceData.documentTypes.map((t) => (
@@ -840,7 +842,7 @@ function DocumentsSection({
           value={docStatus}
           onChange={(e) => setDocStatus(e.target.value)}
           aria-label="Статус документа"
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-slate-400"
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:ring-slate-600"
         >
           <option value="">Статус документа</option>
           {referenceData.documentStatuses.map((s) => (
@@ -849,7 +851,7 @@ function DocumentsSection({
             </option>
           ))}
         </select>
-        <label className="inline-block cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+        <label className="inline-block cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
           {uploading ? "Загрузка…" : "Прикрепить файл"}
           <input
             type="file"
@@ -874,8 +876,8 @@ function DocumentsSection({
           />
         </label>
       </div>
-      <p className="mt-1 text-[11px] text-slate-400">
-        Прототип: сохраняется только имя файла, без содержимого.
+      <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+        Файл сохраняется вместе с содержимым и доступен только вам.
       </p>
     </section>
   );
@@ -891,18 +893,18 @@ function HistorySection({ client, history }: Props) {
   return (
     <>
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
           История дела
         </h3>
-        <ol className="mt-2 flex flex-col gap-2 border-l border-slate-200 pl-4">
+        <ol className="mt-2 flex flex-col gap-2 border-l border-slate-200 pl-4 dark:border-slate-700">
           {clientHistory.map((h) => (
             <li key={h.id} className="relative text-sm">
-              <span className="absolute -left-[21px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-slate-300 text-[8px] text-white" />
-              <p className="text-slate-800">
+              <span className="absolute -left-[21px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-slate-300 text-[8px] text-white dark:bg-slate-600" />
+              <p className="text-slate-800 dark:text-slate-200">
                 <span className="mr-1">{HISTORY_ICONS[h.type]}</span>
                 {h.text}
               </p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 dark:text-slate-500">
                 {formatDateTime(h.createdAt)}
               </p>
             </li>
@@ -911,17 +913,17 @@ function HistorySection({ client, history }: Props) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
           История статусов
         </h3>
         <ul className="mt-2 flex flex-col gap-1 text-sm">
           {statusHistory.length === 0 && (
-            <li className="text-slate-400">Статус ещё не менялся</li>
+            <li className="text-slate-400 dark:text-slate-500">Статус ещё не менялся</li>
           )}
           {statusHistory.map((h) => (
             <li key={h.id} className="flex justify-between">
-              <span className="text-slate-800">{h.text}</span>
-              <span className="text-xs text-slate-400">
+              <span className="text-slate-800 dark:text-slate-200">{h.text}</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">
                 {formatDate(h.createdAt)}
               </span>
             </li>

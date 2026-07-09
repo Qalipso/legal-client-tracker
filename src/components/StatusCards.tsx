@@ -22,24 +22,26 @@ export default function StatusCards({ clients }: Props) {
       {STATUS_ORDER.map((status) => (
         <div
           key={status}
-          className={`rounded-xl border bg-white p-4 shadow-sm ${STATUS_STYLES[status].card}`}
+          className={`rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900 ${STATUS_STYLES[status].card}`}
         >
           <div className="flex items-center gap-2">
             <span
               className={`h-2.5 w-2.5 rounded-full ${STATUS_STYLES[status].dot}`}
             />
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
               {STATUS_LABELS[status]}
             </span>
           </div>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">
+          <p className="mt-2 text-3xl font-semibold text-slate-900 dark:text-slate-100">
             {counts[status]}
           </p>
         </div>
       ))}
-      <div className="rounded-xl border border-slate-300 bg-slate-900 p-4 shadow-sm">
-        <span className="text-sm text-slate-300">Всего клиентов</span>
-        <p className="mt-2 text-3xl font-semibold text-white">
+      <div className="rounded-xl border border-slate-300 bg-slate-900 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-100">
+        <span className="text-sm text-slate-300 dark:text-slate-600">
+          Всего клиентов
+        </span>
+        <p className="mt-2 text-3xl font-semibold text-white dark:text-slate-900">
           {clients.length}
         </p>
       </div>

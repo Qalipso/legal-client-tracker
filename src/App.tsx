@@ -24,6 +24,7 @@ import AuthPage from "./components/AuthPage";
 import SettingsPage from "./components/SettingsPage";
 import AnalyticsPage from "./components/AnalyticsPage";
 import UserChip from "./components/UserChip";
+import ThemeToggle from "./components/ThemeToggle";
 
 type ViewMode = "table" | "board";
 
@@ -71,8 +72,10 @@ function AuthGate() {
 
   if (checking) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <p className="text-sm text-slate-400">Загрузка…</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950">
+        <p className="text-sm text-slate-400 dark:text-slate-500">
+          Загрузка…
+        </p>
       </div>
     );
   }
@@ -283,7 +286,7 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <header className="flex flex-col gap-4">
           {/* stacks on mobile — chip + 3-button group used to squeeze onto
@@ -294,12 +297,13 @@ function MainApp() {
               onClick={() => navigate("#/settings")}
             />
             <div className="flex gap-2">
+              <ThemeToggle />
               <button
                 type="button"
                 onClick={() => navigate("#/analytics")}
                 aria-label="История и аналитика"
                 title="История и аналитика"
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 📊
               </button>
@@ -308,14 +312,14 @@ function MainApp() {
                 onClick={() => navigate("#/settings")}
                 aria-label="Настройки"
                 title="Настройки"
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 ⚙
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm((v) => !v)}
-                className="flex-1 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium whitespace-nowrap text-white shadow-sm hover:bg-slate-700 sm:flex-none"
+                className="flex-1 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium whitespace-nowrap text-white shadow-sm hover:bg-slate-700 sm:flex-none dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
               >
                 {showForm ? "Скрыть форму" : "+ Добавить клиента"}
               </button>
@@ -325,7 +329,7 @@ function MainApp() {
             <h1 className="text-2xl font-bold tracking-tight">
               Legal Client Tracker
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Доска ведения дел: клиенты, статусы, история и следующие шаги.
             </p>
           </div>
@@ -333,29 +337,29 @@ function MainApp() {
 
         <main className="mt-6 flex flex-col gap-6">
           {loading && (
-            <p className="py-16 text-center text-sm text-slate-400">
+            <p className="py-16 text-center text-sm text-slate-400 dark:text-slate-500">
               Загрузка данных…
             </p>
           )}
           {loadError && (
-            <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
+            <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
               Не удалось загрузить данные. Проверьте подключение и обновите
               страницу.
             </p>
           )}
           {!loading && !loadError && data.clients.length === 0 && !showForm ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
-              <p className="text-lg font-semibold text-slate-900">
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                 Добро пожаловать 👋
               </p>
-              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500 dark:text-slate-400">
                 Здесь будет ваша доска дел: клиенты по статусам, задачи с
                 дедлайнами и история по каждому делу. Начните с первого клиента.
               </p>
               <button
                 type="button"
                 onClick={() => setShowForm(true)}
-                className="mt-4 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
+                className="mt-4 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
               >
                 + Добавить первого клиента
               </button>
@@ -381,12 +385,12 @@ function MainApp() {
                       statusFilter={statusFilter}
                       onStatusFilterChange={setStatusFilter}
                     />
-                    <label className="flex shrink-0 items-center gap-2 text-sm text-slate-600">
+                    <label className="flex shrink-0 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                       <input
                         type="checkbox"
                         checked={overdueOnly}
                         onChange={(e) => setOverdueOnly(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300"
+                        className="h-4 w-4 rounded border-slate-300 dark:border-slate-600"
                       />
                       Просроченные задачи
                     </label>
@@ -394,7 +398,7 @@ function MainApp() {
                   <div
                     role="group"
                     aria-label="Вид"
-                    className="flex shrink-0 rounded-lg border border-slate-300 bg-white p-0.5"
+                    className="flex shrink-0 rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900"
                   >
                     {(
                       [
@@ -409,8 +413,8 @@ function MainApp() {
                         aria-pressed={view === mode}
                         className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                           view === mode
-                            ? "bg-slate-900 text-white"
-                            : "text-slate-600 hover:bg-slate-50"
+                            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                            : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
                         }`}
                       >
                         {label}
@@ -440,7 +444,7 @@ function MainApp() {
           )}
         </main>
 
-        <footer className="mt-8 text-center text-xs text-slate-400">
+        <footer className="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
           {provider.name === "supabase"
             ? "Данные хранятся в Supabase (PostgreSQL), доступ только к вашим записям."
             : "Demo-режим: данные хранятся локально в вашем браузере (localStorage)."}

@@ -19,7 +19,7 @@ export default function ClientTable({
 }: Props) {
   if (totalCount === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
         Пока нет клиентов. Нажмите «Добавить клиента», чтобы создать первого.
       </div>
     );
@@ -27,16 +27,16 @@ export default function ClientTable({
 
   if (clients.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
         Ничего не найдено. Измените поиск или фильтр.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
           <tr>
             <th className="px-4 py-3 font-medium">Имя клиента</th>
             <th className="px-4 py-3 font-medium">Телефон</th>
@@ -46,19 +46,19 @@ export default function ClientTable({
             <th className="px-4 py-3 font-medium">Действия</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {clients.map((client) => (
-            <tr key={client.id} className="hover:bg-slate-50">
+            <tr key={client.id} className="hover:bg-slate-50 dark:hover:bg-slate-800">
               <td className="px-4 py-3">
                 <button
                   type="button"
                   onClick={() => onOpenClient(client.id)}
-                  className="font-medium text-slate-900 underline-offset-2 hover:underline"
+                  className="font-medium text-slate-900 underline-offset-2 hover:underline dark:text-slate-100"
                 >
                   {client.name}
                 </button>
               </td>
-              <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+              <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
                 {client.phone}
               </td>
               <td className="px-4 py-3">
@@ -71,10 +71,10 @@ export default function ClientTable({
                   {STATUS_LABELS[client.status]}
                 </span>
               </td>
-              <td className="max-w-[220px] truncate px-4 py-3 text-slate-500">
+              <td className="max-w-[220px] truncate px-4 py-3 text-slate-500 dark:text-slate-400">
                 {client.note ?? "—"}
               </td>
-              <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+              <td className="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
                 {formatDate(client.createdAt)}
               </td>
               <td className="px-4 py-3">
@@ -85,7 +85,7 @@ export default function ClientTable({
                       onStatusChange(client.id, e.target.value as ClientStatus)
                     }
                     aria-label={`Изменить статус: ${client.name}`}
-                    className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-slate-400"
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                   >
                     {STATUS_ORDER.map((s) => (
                       <option key={s} value={s}>
@@ -97,7 +97,7 @@ export default function ClientTable({
                     type="button"
                     onClick={() => onDelete(client.id)}
                     aria-label={`Удалить клиента: ${client.name}`}
-                    className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                    className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/40"
                   >
                     Удалить
                   </button>

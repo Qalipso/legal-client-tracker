@@ -22,7 +22,7 @@ export default function Filters({
         onChange={(e) => onSearchChange(e.target.value)}
         placeholder="Поиск по имени, телефону или статусу…"
         aria-label="Поиск по клиентам"
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400 sm:max-w-md"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400 sm:max-w-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-slate-600"
       />
       <select
         value={statusFilter}
@@ -30,7 +30,7 @@ export default function Filters({
           onStatusFilterChange(e.target.value as ClientStatus | "all")
         }
         aria-label="Фильтр по статусу"
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400"
+        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-slate-600"
       >
         <option value="all">Все статусы</option>
         {STATUS_ORDER.map((s) => (
