@@ -4,12 +4,15 @@
 // POST -> handles an incoming Telegram Update.
 //
 // Two /start paths:
-// 1. `/start connect_<token>` — the token-based connect flow (v0.8). The
-//    frontend mints a short-lived, single-use token (telegram_connect_tokens,
-//    migration 009) and opens t.me/<bot>?start=connect_<token>. This handler
-//    verifies the token (exists, not used, not expired), creates the
-//    notification_recipients row itself, and marks the token used — the
-//    user never has to know or copy a chat_id.
+// 1. `/start connect_<token>` — the token-based connect flow (v0.8, hashed
+//    at rest since v0.8.1). The frontend calls create_telegram_connect_token()
+//    (migration 010), which mints a short-lived, single-use token and
+//    persists only its SHA-256 hash — the plaintext exists nowhere but this
+//    one response. The frontend opens t.me/<bot>?start=connect_<token>; this
+//    handler hashes the incoming token the same way, verifies it (exists,
+//    not used, not expired) by hash, creates the notification_recipients row
+//    itself, and marks the token used — the user never has to know or copy
+//    a chat_id, and the DB never stores anything replayable.
 // 2. Plain `/start` (or any other text) — the original fallback: reply with
 //    the raw chat_id for manual entry. Kept for anyone who lands here
 //    without a valid token (e.g. an expired/reused connect link).
@@ -56,12 +59,24 @@ function welcomeText(chatId: number, firstName?: string): string {
   ].join("\n");
 }
 
+// SHA-256 hex digest — must match Postgres's
+// encode(digest(raw_token, 'sha256'), 'hex') exactly (lowercase hex),
+// since the token is looked up by hash, never by plaintext (migration 010).
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 // Resolves a connect token to its owning user, atomically claiming it (the
 // update's `used_at is null` filter means a raced/replayed request only
 // succeeds once — PostgREST returns zero updated rows for the loser).
-async function claimConnectToken(token: string): Promise<string | null> {
+async function claimConnectToken(rawToken: string): Promise<string | null> {
+  const tokenHash = await sha256Hex(rawToken);
   const res = await fetch(
-    `${SB_URL}/rest/v1/telegram_connect_tokens?token=eq.${token}&used_at=is.null&expires_at=gt.${new Date().toISOString()}`,
+    `${SB_URL}/rest/v1/telegram_connect_tokens?token_hash=eq.${tokenHash}&used_at=is.null&expires_at=gt.${new Date().toISOString()}`,
     {
       method: "PATCH",
       headers: { ...svcHeaders, Prefer: "return=representation" },
@@ -72,22 +87,33 @@ async function claimConnectToken(token: string): Promise<string | null> {
   return Array.isArray(rows) && rows[0] ? rows[0].user_id : null;
 }
 
+// Upserts on (user_id, channel, destination) — migration 011. Without this,
+// reconnecting an already-connected chat (e.g. tapping an old connect link
+// again) created a second row for the same chat_id, and that chat would
+// get every notification twice. Found via real end-to-end testing, not a
+// hypothetical.
 async function createRecipient(
   userId: string,
   chatId: number,
   displayName?: string,
 ): Promise<void> {
-  await fetch(`${SB_URL}/rest/v1/notification_recipients`, {
-    method: "POST",
-    headers: svcHeaders,
-    body: JSON.stringify({
-      user_id: userId,
-      name: displayName || "Telegram",
-      channel: "telegram",
-      destination: String(chatId),
-      is_active: true,
-    }),
-  });
+  await fetch(
+    `${SB_URL}/rest/v1/notification_recipients?on_conflict=user_id,channel,destination`,
+    {
+      method: "POST",
+      headers: {
+        ...svcHeaders,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        name: displayName || "Telegram",
+        channel: "telegram",
+        destination: String(chatId),
+        is_active: true,
+      }),
+    },
+  );
 }
 
 Deno.serve(async (req: Request) => {

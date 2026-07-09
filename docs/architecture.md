@@ -60,9 +60,10 @@ anon key + JWT пользователя; `TG_BOT_TOKEN`, `RESEND_API_KEY` и
 | Supabase client | `src/lib/supabaseClient.ts` | модульный синглтон (один GoTrueClient на страницу) | `[Implemented]` |
 | Notify | `src/lib/notify.ts` | fire-and-forget вызов функции с JWT пользователя | `[Implemented]` |
 | notify-telegram | `supabase/functions/notify-telegram/index.ts` | маршрутизация Telegram+email по каналу получателя; auth через JWT или internal_secret (для cron); email по умолчанию шлётся на профильный адрес, если явный получатель не задан | `[Implemented]` |
-| telegram-webhook | `supabase/functions/telegram-webhook/index.ts` | `/start connect_<token>` — резолвит токен, создаёт получателя (v0.8); plain `/start` — fallback, присылает chat_id для ручного ввода | `[Implemented]` |
+| telegram-webhook | `supabase/functions/telegram-webhook/index.ts` | `/start connect_<token>` — хеширует токен, резолвит по hash, upsert получателя (v0.8→v0.8.2); plain `/start` — fallback, присылает chat_id для ручного ввода | `[Implemented]` |
+| create_telegram_connect_token | migration 010, Postgres function | генерирует токен, хеширует, персистит только hash; plaintext — только в RETURNING | `[Implemented]` |
 | pg_cron scheduler | migration 007, `notify_overdue_items()` | ежедневно (08:00 UTC) находит просроченные task/deadline и шлёт уведомление | `[Implemented]` |
-| Schema | `supabase/migrations/001…009*.sql` | таблицы, RLS, триггеры, storage buckets, cron | `[Implemented]` |
+| Schema | `supabase/migrations/001…011*.sql` | таблицы, RLS, триггеры, storage buckets, cron | `[Implemented]` |
 
 ## 4. Data model
 
@@ -90,16 +91,22 @@ anon key + JWT пользователя; `TG_BOT_TOKEN`, `RESEND_API_KEY` и
 - `profiles`, `account_settings` — создаются триггером при регистрации;
   `profiles.role` (`admin`/`lawyer`/`assistant`).
 - `notification_recipients` — получатели, `channel` in (`telegram`,
-  `email`).
+  `email`); `unique (user_id, channel, destination)` (v0.8.2) — reconnect
+  апсертит существующую запись вместо дублирования (найдено реальным
+  end-to-end тестом: без constraint один и тот же chat_id получал
+  уведомление дважды).
 - `notification_events` — журнал попыток: `status sent|error|skipped`,
   `error`, `payload jsonb`, `sent_at`.
 - `internal_secrets` — service_role-only, shared secret для cron→function
   auth (не читается ни anon, ни authenticated ролью).
 - `telegram_connect_tokens` — короткоживущий (10 мин), одноразовый токен
-  для подключения Telegram без ручного ввода chat_id (v0.8); `user_id`
-  создаёт свой токен (RLS: `user_id = auth.uid()` на insert/select), сам
-  токен резолвится и помечается использованным через service-role в
-  `telegram-webhook`.
+  для подключения Telegram без ручного ввода chat_id (v0.8). Хранится
+  только `token_hash` (SHA-256, v0.8.1) — plaintext существует лишь
+  внутри `create_telegram_connect_token()` и её единственного возврата,
+  никогда не персистится. `user_id` читает только свои токены (RLS);
+  создание — через `create_telegram_connect_token()` (SECURITY INVOKER,
+  auth.uid() резолвится как у вызывающего пользователя); резолвинг и
+  пометка использованным — через service-role в `telegram-webhook`.
 
 Сокращённая доменная модель (TypeScript, `src/types/client.ts`):
 
@@ -182,6 +189,18 @@ notify-telegram:
     атомарный claim — гонка/replay не проходит), TTL 10 минут. Старый путь
     (`/start` → голый chat_id в ответ) оставлен как fallback, а не удалён —
     ничего не сломано для тех, кто уже так подключился.
+15. **Токен хешируется, а не хранится в открытом виде** (v0.8.1) — если
+    строка когда-нибудь утечёт (бэкап, неверный доступ, компрометация
+    service-role ключа), голый токен сразу пригоден для использования в
+    10-минутное окно; hash — нет. Сделано через Postgres-функцию
+    (SECURITY INVOKER), а не отдельную Edge Function — тот же эффект, RLS
+    уже даёт нужную проверку авторизации бесплатно при вызове от имени
+    пользователя.
+16. **Upsert получателя вместо insert** (v0.8.2) — реальный, а не
+    гипотетический баг, найденный сквозным тестированием: reconnect уже
+    подключённого чата плодил вторую запись, тот же чат получал бы
+    уведомления дважды. `unique (user_id, channel, destination)` +
+    `Prefer: resolution=merge-duplicates`.
 
 ## 7. Trade-offs
 
@@ -236,7 +255,8 @@ supabase/
                       # 004 matter model + reference dictionaries ·
                       # 005 roles (admin/lawyer/assistant) + avatars storage ·
                       # 006 case-documents storage · 007 pg_cron overdue
-                      # scheduler · 008 email channel · 009 telegram connect tokens
+                      # scheduler · 008 email channel · 009 telegram connect
+                      # tokens · 010 hash tokens at rest · 011 recipient dedup
   functions/
     notify-telegram/  # per-user + cron Telegram/email routing + events log
     telegram-webhook/  # bot inbound webhook — /start connect_<token> flow +

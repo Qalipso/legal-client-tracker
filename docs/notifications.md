@@ -85,12 +85,18 @@ RLS: пользователь читает только свои события 
 обрабатывает два пути `/start`:
 
 1. **`/start connect_<token>`** (v0.8, основной путь) — токен минтится
-   фронтендом (`telegram_connect_tokens`, migration 009: crypto-random,
-   single-use, TTL 10 минут) при клике «📎 Подключить Telegram». Webhook
-   атомарно "заявляет" токен (`PATCH … where used_at is null and
-   expires_at > now()` — гонка/replay возвращают 0 строк второму запросу),
-   резолвит `user_id`, создаёт `notification_recipients` сам и отвечает
-   подтверждением. Пользователь никогда не видит и не вводит chat_id.
+   через `create_telegram_connect_token()` (Postgres function, migration
+   010: crypto-random, single-use, TTL 10 минут) при клике «📎 Подключить
+   Telegram». В БД (`telegram_connect_tokens`) персистится только
+   SHA-256 hash токена (v0.8.1) — plaintext возвращается один раз в
+   RETURNING и больше нигде не хранится. Webhook хеширует входящий токен
+   тем же алгоритмом и атомарно "заявляет" его по hash (`PATCH … where
+   used_at is null and expires_at > now()` — гонка/replay возвращают 0
+   строк второму запросу), резолвит `user_id`, upsert'ит
+   `notification_recipients` (v0.8.2: `on_conflict=user_id,channel,
+   destination` — reconnect обновляет запись, а не дублирует её) и
+   отвечает подтверждением. Пользователь никогда не видит и не вводит
+   chat_id.
 2. **Plain `/start`** (fallback) — на случай истёкшего/потерянного токена:
    отвечает голым chat_id для ручного ввода в Настройках. Раньше это был
    единственный путь (заменял сторонний бот `@userinfobot`); теперь это

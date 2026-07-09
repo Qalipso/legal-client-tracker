@@ -455,16 +455,14 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
     },
 
     async createTelegramConnectToken() {
-      const { data: auth } = await sb.auth.getUser();
-      const uid = auth.user?.id;
-      if (!uid) throw new Error("not authenticated");
-      const { data, error } = await sb
-        .from("telegram_connect_tokens")
-        .insert({ user_id: uid })
-        .select("token")
-        .single();
+      // token is minted + hashed server-side (create_telegram_connect_token,
+      // migration 010) — only the hash is ever persisted; the plaintext
+      // returned here exists nowhere else.
+      const { data, error } = await sb.rpc("create_telegram_connect_token");
       if (error) throw error;
-      return data.token;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row?.token) throw new Error("Telegram connect token не создан");
+      return row.token;
     },
 
     async addAttachment(
