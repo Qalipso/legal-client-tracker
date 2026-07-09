@@ -1,6 +1,14 @@
-// Telegram notification routing (v3, per-user).
+// Telegram notification routing (v5, per-user + internal/cron callers).
 // - Bot token lives ONLY in Supabase secrets (TG_BOT_TOKEN)
-// - Caller must send the USER's JWT; the function resolves auth.uid() from it
+// - verify_jwt is OFF at the gateway: pg_cron's net.http_post can't send an
+//   Authorization header, so this function does its OWN auth instead:
+//   1. USER's JWT (Authorization header) — normal path, from the app UI.
+//   2. internal_secret + explicit user_id in the body — used by the
+//      task.overdue pg_cron scheduler, which has no user session and must
+//      notify many users in one run. The secret lives in the DB
+//      (internal_secrets table, service-role-only RLS), never in committed
+//      source or CLI-set env — see supabase/migrations/007_overdue_scheduler.sql.
+//   Every call is authenticated by one of these two paths before any work happens.
 // - Recipients + event toggles come from the user's account settings
 // - Every attempt is logged to notification_events
 // If Telegram is not configured or there are no recipients → {skipped:true}.
@@ -42,6 +50,14 @@ async function select(path: string): Promise<any[]> {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: svcHeaders });
   const rows = await res.json().catch(() => []);
   return Array.isArray(rows) ? rows : [];
+}
+
+async function verifyInternalSecret(provided: string): Promise<boolean> {
+  const rows = await select(
+    `internal_secrets?key=eq.cron_shared_secret&select=value`,
+  );
+  const expected = rows[0]?.value;
+  return Boolean(expected) && provided === expected;
 }
 
 async function logEvent(row: Record<string, unknown>): Promise<void> {
@@ -103,7 +119,12 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
-  let body: { event_type?: string; payload?: Record<string, unknown> };
+  let body: {
+    event_type?: string;
+    payload?: Record<string, unknown>;
+    internal_secret?: string;
+    user_id?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -112,7 +133,14 @@ Deno.serve(async (req: Request) => {
   const eventType = body.event_type ?? "test";
   const payload = body.payload ?? {};
 
-  const userId = await getUserId(req);
+  let userId: string | null = null;
+  if (body.internal_secret && body.user_id) {
+    const ok = await verifyInternalSecret(body.internal_secret);
+    if (!ok) return json({ error: "unauthorized" }, 401);
+    userId = body.user_id;
+  } else {
+    userId = await getUserId(req);
+  }
   if (!userId) return json({ error: "unauthorized" }, 401);
 
   const skip = async (reason: string) => {
