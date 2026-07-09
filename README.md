@@ -8,7 +8,10 @@
 
 ## Live Demo
 
-[link — pending deploy]
+**https://legal-client-tracker.vercel.app**
+
+Тестовый доступ: `test@qalipso.legal` / `testtest` (создан через Supabase
+Dashboard → Authentication → Add user, автоподтверждён).
 
 ## Документация
 
