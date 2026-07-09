@@ -37,6 +37,12 @@ const STATUS_BADGES: Record<NotificationEvent["status"], string> = {
   skipped: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
 };
 
+const STATUS_LABELS_RU: Record<NotificationEvent["status"], string> = {
+  sent: "отправлено",
+  error: "ошибка",
+  skipped: "пропущено",
+};
+
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Администратор",
   lawyer: "Юрист",
@@ -44,25 +50,19 @@ const ROLE_LABELS: Record<UserRole, string> = {
 };
 
 // Translates raw provider/API error strings into something a non-technical
-// user can act on — falls back to the raw message for anything unmapped
-// rather than hiding it.
+// user can act on. Never surfaces vendor/internal names (Resend, HTTP
+// codes, env var names) — those belong in server logs, not a lawyer's UI.
 function friendlyError(error: string): string {
   if (error.includes("chat not found")) {
-    return "Chat не найден — получатель ещё не написал боту /start";
+    return "Получатель ещё не написал боту в Telegram — попросите его нажать Start";
   }
   if (error.includes("bot was blocked")) {
-    return "Бот заблокирован получателем в Telegram";
+    return "Получатель заблокировал бота в Telegram";
   }
-  if (/RESEND_API_KEY|RESEND_FROM_EMAIL/.test(error)) {
-    return "Email-доставка не настроена (нет ключа Resend)";
+  if (/RESEND_API_KEY|RESEND_FROM_EMAIL|TG_BOT_TOKEN/.test(error)) {
+    return "Доставка временно недоступна — обратитесь к администратору";
   }
-  if (error.includes("TG_BOT_TOKEN")) {
-    return "Telegram-бот не настроен на сервере";
-  }
-  if (/^HTTP \d+/.test(error) || error === "HTTP network") {
-    return `Ошибка сети при отправке (${error})`;
-  }
-  return error;
+  return "Не удалось отправить — попробуйте ещё раз позже";
 }
 
 const TELEGRAM_BOT_USERNAME = "legalclienttrackerbot";
@@ -333,18 +333,11 @@ export default function SettingsPage({
     setTesting(true);
     setTestResult(null);
     const r = await sendTestNotification();
-    const failReason =
-      r.reason ??
-      r.errors?.[0] ??
-      (r.errors?.length === 0 ? undefined : "неизвестная причина");
+    const failReason = r.reason ?? (r.errors?.[0] ? friendlyError(r.errors[0]) : "неизвестная причина");
     setTestResult(
       r.sent
         ? `✅ Отправлено (доставлено: ${r.delivered ?? 1})`
-        : `Не отправлено: ${failReason}${
-            r.errors?.[0]?.includes("chat not found")
-              ? " — напишите боту любое сообщение (боты не могут писать первыми) и проверьте chat ID"
-              : ""
-          }`,
+        : `Не отправлено: ${failReason}`,
     );
     setEvents(await provider.listNotificationEvents(15).catch(() => events));
     setTesting(false);
@@ -787,8 +780,7 @@ export default function SettingsPage({
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <h2 className="text-base font-semibold">Данные</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Экспорт клиентов в CSV или импорт из CSV (колонки:{" "}
-              {EXPORT_COLUMNS.join(", ")}).
+              Экспорт всех клиентов и дел в таблицу (CSV) или импорт из неё.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button
@@ -856,7 +848,7 @@ export default function SettingsPage({
                       )}
                       {ev.error && (
                         <span className="ml-2 text-xs text-red-500 dark:text-red-400">
-                          {friendlyError(ev.error)}
+                          {ev.status === "error" ? friendlyError(ev.error) : ev.error}
                         </span>
                       )}
                     </span>
@@ -874,7 +866,7 @@ export default function SettingsPage({
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGES[ev.status]}`}
                       >
-                        {ev.status}
+                        {STATUS_LABELS_RU[ev.status]}
                       </span>
                       <span className="text-xs text-slate-400 dark:text-slate-500">
                         {formatDateTime(ev.createdAt)}

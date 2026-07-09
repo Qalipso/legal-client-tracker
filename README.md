@@ -57,7 +57,7 @@ Dashboard → Authentication → Add user, автоподтверждён).
 - [docs/setup.md](docs/setup.md) — локальный запуск, Supabase с нуля, Telegram-бот, Vercel deploy
 - [docs/notifications.md](docs/notifications.md) — контракт edge function, события, журнал доставки
 - [docs/qa/ui-test-plan.md](docs/qa/ui-test-plan.md) — план UI-тестирования (desktop/mobile), найденные и исправленные баги
-- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v1.0
+- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v1.0.1
 
 ## Features
 
