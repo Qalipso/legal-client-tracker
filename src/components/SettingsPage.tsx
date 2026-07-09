@@ -428,8 +428,10 @@ export default function SettingsPage({
             <ul className="mt-3 flex flex-col gap-2">
               {recipients.length === 0 && (
                 <li className="text-sm text-slate-400">
-                  Пока нет получателей. Добавьте Telegram chat ID — узнать свой
-                  можно у{" "}
+                  Пока нет получателей. Напишите{" "}
+                  <span className="font-medium text-slate-600">/start</span>{" "}
+                  своему Telegram-боту — он ответит вашим chat ID (или узнайте
+                  его у{" "}
                   <a
                     href="https://t.me/userinfobot"
                     target="_blank"
@@ -438,7 +440,7 @@ export default function SettingsPage({
                   >
                     @userinfobot
                   </a>
-                  .
+                  ).
                 </li>
               )}
               {recipients.map((r) => (

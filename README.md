@@ -68,8 +68,12 @@
   в `notification_events` (status, error, payload, sent_at)
 - Токен бота только в секретах Supabase (`TG_BOT_TOKEN`); нет получателей
   или токена → `{"skipped": true, "reason": ...}`, UI не ломается
-- Настройка: @BotFather → токен в секреты → в `#/settings` добавить свой
-  chat ID (узнать: @userinfobot) → «Send test notification»
+- **Бот отвечает на `/start`** (`telegram-webhook`, v0.5.1): пишешь боту —
+  он присылает в ответ твой chat ID, готовый для вставки в настройки; больше
+  не нужен сторонний @userinfobot
+- Настройка: @BotFather → токен в секреты → задеплоить обе функции →
+  зарегистрировать webhook → написать боту `/start` → скопировать chat ID →
+  в `#/settings` добавить получателя → «Send test notification»
 
 **Справочники (v0.4)**
 - Типы дел, стадии дел, типы документов, статусы документов, типы сроков —

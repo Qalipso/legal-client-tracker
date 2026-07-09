@@ -30,13 +30,18 @@ npm run dev        # http://localhost:5173
      `update clients set user_id = '<ваш auth.uid>' where user_id is null;`
      аналогично tasks / case_history / attachments)
 
-### 2.2 Задеплоить Edge Function
+### 2.2 Задеплоить Edge Functions
 
 ```bash
 npx supabase login
 npx supabase link --project-ref <PROJECT_REF>
 npx supabase functions deploy notify-telegram
+npx supabase functions deploy telegram-webhook --no-verify-jwt
 ```
+
+`telegram-webhook` обязательно с `--no-verify-jwt` — Telegram не умеет
+слать Supabase JWT, эндпоинт должен быть публичным (защищён отдельным
+`secret_token`, см. docs/notifications.md).
 
 ### 2.3 Env для фронтенда
 
@@ -63,8 +68,15 @@ Anon key — публичный (данные защищает RLS). `.env*` в 
    npx supabase secrets set TG_BOT_TOKEN=<токен>
    ```
    или Dashboard → Edge Functions → Secrets.
-3. Написать своему боту любое сообщение (иначе бот не может писать первым).
-4. Узнать свой chat ID: написать **@userinfobot**.
+3. Задеплоить `notify-telegram` и `telegram-webhook` (см. §2.2), затем
+   зарегистрировать webhook одним запросом:
+   ```bash
+   curl https://<PROJECT_REF>.supabase.co/functions/v1/telegram-webhook
+   # {"ok":true,"result":true,"description":"Webhook was set"}
+   ```
+4. Написать боту `/start` (или любое сообщение) — он ответит приветствием
+   с вашим chat ID, готовым для копирования (бот не может писать первым —
+   это ограничение Telegram, поэтому начинать должны вы).
 5. В приложении: ⚙ → Настройки → Получатели → добавить имя + chat ID →
    **Send test notification** → должно прийти «✅ Тестовое уведомление».
 
