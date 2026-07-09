@@ -1,14 +1,15 @@
-// Notification routing — Telegram + email (v6, per-user + internal/cron
+// Notification routing — Telegram + email (v7, per-user + internal/cron
 // callers). Endpoint name/path kept as "notify-telegram" for stability (the
 // frontend + pg_cron both call this URL); it now dispatches by recipient
 // channel rather than only Telegram.
 // - Telegram bot token lives ONLY in Supabase secrets (TG_BOT_TOKEN)
-// - Email delivery uses the Resend API — needs RESEND_API_KEY and
-//   RESEND_FROM_EMAIL set as edge function secrets (not settable from this
-//   project's tooling). Without them, email recipients get a logged "not
-//   configured" error per attempt and Telegram recipients are unaffected.
-//   [Not verified]: no Resend account/API key exists for this project, so
-//   the email path has not been exercised against the real Resend API.
+// - Email delivery uses the Resend API (RESEND_API_KEY + RESEND_FROM_EMAIL
+//   edge function secrets, sender must be on a Resend-verified domain) —
+//   live-verified against production, see CHANGELOG v0.6.1.
+// - Email has an implicit default recipient: if the email channel is
+//   enabled and no one explicitly added an email recipient, the account's
+//   own profile email is used (see the fallback below). Telegram has no
+//   equivalent default — there's no "obvious" chat ID to guess.
 // - verify_jwt is OFF at the gateway: pg_cron's net.http_post can't send an
 //   Authorization header, so this function does its OWN auth instead:
 //   1. USER's JWT (Authorization header) — normal path, from the app UI.
@@ -192,6 +193,26 @@ Deno.serve(async (req: Request) => {
   const recipients = await select(
     `notification_recipients?user_id=eq.${userId}&is_active=eq.true&channel=in.(${channelsEnabled.join(",")})&select=id,channel,destination`,
   );
+
+  // Email has an obvious default the user already gave us — their own
+  // account email — unlike Telegram, which has no equivalent. If email is
+  // enabled and no explicit email recipient exists yet, notify the account
+  // owner directly instead of silently doing nothing.
+  if (channelsEnabled.includes("email")) {
+    const hasExplicitEmail = recipients.some(
+      (r) => r.channel === "email",
+    );
+    if (!hasExplicitEmail) {
+      const profileRows = await select(
+        `profiles?id=eq.${userId}&select=email`,
+      );
+      const ownEmail = profileRows[0]?.email;
+      if (ownEmail) {
+        recipients.push({ id: null, channel: "email", destination: ownEmail });
+      }
+    }
+  }
+
   if (recipients.length === 0) {
     return skip("нет активных получателей для включённых каналов");
   }
