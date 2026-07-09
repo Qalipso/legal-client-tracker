@@ -314,7 +314,7 @@ function MainApp() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <header className="flex flex-col gap-4">
+        <header className="flex flex-col gap-4 pb-6">
           {/* stacks on mobile — chip + 3-button group used to squeeze onto
               one row and wrap ("+ Добавить\nклиента" across 3 lines) */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -361,7 +361,7 @@ function MainApp() {
           </div>
         </header>
 
-        <main className="mt-6 flex flex-col gap-6">
+        <main className="flex flex-col gap-8 border-t border-slate-200 pt-8 dark:border-slate-800">
           {loading && (
             <p className="py-16 text-center text-sm text-slate-400 dark:text-slate-500">
               Загрузка данных…
@@ -423,7 +423,7 @@ function MainApp() {
                   />
                 )}
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <Filters
                       search={search}
@@ -444,7 +444,7 @@ function MainApp() {
                   <div
                     role="group"
                     aria-label="Вид"
-                    className="flex shrink-0 rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900"
+                    className="flex shrink-0 rounded-lg border border-slate-300 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-950"
                   >
                     {(
                       [
