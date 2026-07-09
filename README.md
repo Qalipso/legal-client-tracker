@@ -128,7 +128,7 @@ Dashboard → Authentication → Add user, автоподтверждён).
 - Tailwind CSS v4
 - **Supabase (PostgreSQL)** — основное хранилище; схема в `supabase/migrations/`
 - **localStorage fallback** — demo/dev-режим, если Supabase env не задан
-- Vercel (deploy)
+- **Vercel** — прод задеплоен: https://legal-client-tracker.vercel.app
 
 ## Architecture
 
@@ -186,6 +186,7 @@ src/
     notify.ts         # fire-and-forget event notifications (user JWT)
     clients.ts        # date/overdue/next-task helpers
     csv.ts            # minimal CSV parse/serialize (no dependency)
+    matterReference.ts # static reference dictionaries for demo-mode
     statuses.ts       # status labels, order, visual identity
   types/client.ts     # domain types
   App.tsx             # AuthGate + hash routing + state owner
@@ -194,9 +195,13 @@ supabase/
                       # 003 auth + RLS + profiles/account_settings ·
                       # 004 matter model + reference dictionaries ·
                       # 005 roles (admin/lawyer/assistant) + avatars storage
-  functions/notify-telegram/  # per-user Telegram routing + events log
+  functions/
+    notify-telegram/  # per-user Telegram routing + events log
+    telegram-webhook/  # bot inbound webhook — replies to /start with chat_id
   seed.sql
-docs/                 # architecture · setup · notifications · qa/ui-test-plan
+docs/                 # architecture · security · features · setup ·
+                      # notifications · qa/ui-test-plan · onboarding-email-draft ·
+                      # brand/ (Elly bot character card + avatar prompts)
 ```
 
 ## Data model
