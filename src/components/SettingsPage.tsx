@@ -1,19 +1,24 @@
 import { useEffect, useState } from "react";
 import type {
   AccountSettings,
+  NewClientInput,
   NotificationEvent,
   NotificationRecipient,
   Profile,
+  UserRole,
 } from "../types/client";
 import type { DataProvider } from "../lib/providers";
 import { sendTestNotification } from "../lib/notify";
 import { formatDateTime } from "../lib/clients";
+import { STATUS_ORDER } from "../lib/statuses";
+import { parseCsv, toCsv } from "../lib/csv";
 
 type Props = {
   provider: DataProvider;
   onBack: () => void;
   onLogout: () => void;
   onToast: (message: string) => void;
+  onProfileChange: (profile: Profile) => void;
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -30,11 +35,35 @@ const STATUS_BADGES: Record<NotificationEvent["status"], string> = {
   skipped: "bg-slate-100 text-slate-500",
 };
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: "Администратор",
+  lawyer: "Юрист",
+  assistant: "Ассистент",
+};
+
+const EXPORT_COLUMNS = [
+  "name",
+  "phone",
+  "email",
+  "telegram",
+  "status",
+  "note",
+  "matterTitle",
+  "matterType",
+  "matterSubject",
+  "stage",
+  "counterparty",
+  "keyDeadline",
+  "priority",
+  "responsibleLawyer",
+] as const;
+
 export default function SettingsPage({
   provider,
   onBack,
   onLogout,
   onToast,
+  onProfileChange,
 }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [settings, setSettings] = useState<AccountSettings | null>(null);
@@ -45,6 +74,11 @@ export default function SettingsPage({
   const [newChatId, setNewChatId] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [importSummary, setImportSummary] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const isAssistant = profile?.role === "assistant";
 
   useEffect(() => {
     Promise.all([
@@ -65,13 +99,101 @@ export default function SettingsPage({
   async function saveProfile() {
     if (!profile) return;
     try {
-      await provider.updateProfile({
+      const updated = await provider.updateProfile({
         fullName: profile.fullName,
         companyName: profile.companyName,
       });
+      setProfile(updated);
+      onProfileChange(updated);
       onToast("Профиль сохранён");
     } catch {
       onToast("Не удалось сохранить профиль");
+    }
+  }
+
+  async function handleAvatarSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const updated = await provider.uploadAvatar(file);
+      setProfile(updated);
+      onProfileChange(updated);
+      onToast("Фото обновлено");
+    } catch {
+      onToast("Не удалось загрузить фото");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  function exportCsv() {
+    // client-side only: reads the currently loaded snapshot via a fresh
+    // fetch so the export always reflects the latest data
+    provider.fetchAll().then((data) => {
+      const rows = data.clients.map((c) =>
+        Object.fromEntries(
+          EXPORT_COLUMNS.map((col) => [col, String((c as any)[col] ?? "")]),
+        ),
+      );
+      const csv = toCsv(rows, [...EXPORT_COLUMNS]);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `clients-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      onToast(`Экспортировано ${rows.length} клиентов`);
+    });
+  }
+
+  async function handleImportSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setImportSummary(null);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      let created = 0;
+      let skipped = 0;
+      for (const row of rows) {
+        if (!row.name?.trim() || !row.phone?.trim()) {
+          skipped++;
+          continue;
+        }
+        const status = STATUS_ORDER.includes(row.status as any)
+          ? (row.status as NewClientInput["status"])
+          : "new";
+        await provider.createClient({
+          name: row.name,
+          phone: row.phone,
+          status,
+          note: row.note || undefined,
+          email: row.email || undefined,
+          telegram: row.telegram || undefined,
+          responsibleLawyer: row.responsibleLawyer || undefined,
+          priority: (row.priority as any) || undefined,
+          matterTitle: row.matterTitle || undefined,
+          matterType: row.matterType || undefined,
+          matterSubject: row.matterSubject || undefined,
+          stage: row.stage || undefined,
+          counterparty: row.counterparty || undefined,
+          keyDeadline: row.keyDeadline || undefined,
+        });
+        created++;
+      }
+      setImportSummary(
+        `Импортировано: ${created}. Пропущено (нет имени/телефона): ${skipped}.`,
+      );
+      onToast(`Импорт завершён: ${created} клиентов добавлено`);
+    } catch {
+      setImportSummary("Не удалось разобрать файл — проверьте формат CSV.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -89,7 +211,7 @@ export default function SettingsPage({
 
   async function addRecipient(e: React.FormEvent) {
     e.preventDefault();
-    if (!newName.trim() || !newChatId.trim()) return;
+    if (!newName.trim() || !newChatId.trim() || isAssistant) return;
     try {
       setRecipients(
         await provider.addRecipient({ name: newName, destination: newChatId }),
@@ -170,6 +292,49 @@ export default function SettingsPage({
           {/* Profile */}
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold">Профиль</h2>
+            {profile && (
+              <>
+                <div className="mt-3 flex items-center gap-4">
+                  {profile.avatarUrl ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt=""
+                      className="h-16 w-16 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-900 text-lg font-semibold text-white">
+                      {(profile.fullName || profile.email).slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                  <div>
+                    <label className="inline-block cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                      {uploadingAvatar ? "Загрузка…" : "Сделать фото / загрузить"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="user"
+                        className="hidden"
+                        disabled={uploadingAvatar}
+                        onChange={handleAvatarSelect}
+                      />
+                    </label>
+                    <p className="mt-1 text-xs text-slate-400">
+                      На телефоне откроется камера; на десктопе — выбор файла.
+                    </p>
+                  </div>
+                  <span className="ml-auto rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700">
+                    {ROLE_LABELS[profile.role]}
+                  </span>
+                </div>
+                {isAssistant && (
+                  <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Роль «Ассистент»: нельзя удалять клиентов и менять
+                    настройки уведомлений. Роль назначается администратором
+                    вне приложения (пока нет команды/workspace).
+                  </p>
+                )}
+              </>
+            )}
             {profile && (
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
@@ -285,59 +450,63 @@ export default function SettingsPage({
                     <span className="font-medium">{r.name}</span>{" "}
                     <span className="text-slate-500">· {r.destination}</span>
                   </span>
-                  <span className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={async () =>
-                        setRecipients(
-                          await provider.updateRecipient(r.id, {
-                            isActive: !r.isActive,
-                          }),
-                        )
-                      }
-                      className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                    >
-                      {r.isActive ? "Отключить" : "Включить"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!window.confirm(`Удалить получателя «${r.name}»?`)) return;
-                        setRecipients(await provider.deleteRecipient(r.id));
-                      }}
-                      className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      Удалить
-                    </button>
-                  </span>
+                  {!isAssistant && (
+                    <span className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={async () =>
+                          setRecipients(
+                            await provider.updateRecipient(r.id, {
+                              isActive: !r.isActive,
+                            }),
+                          )
+                        }
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                      >
+                        {r.isActive ? "Отключить" : "Включить"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Удалить получателя «${r.name}»?`)) return;
+                          setRecipients(await provider.deleteRecipient(r.id));
+                        }}
+                        className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                      >
+                        Удалить
+                      </button>
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
 
-            <form onSubmit={addRecipient} className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Имя (Юрист Эдуард)"
-                aria-label="Имя получателя"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
-              />
-              <input
-                type="text"
-                value={newChatId}
-                onChange={(e) => setNewChatId(e.target.value)}
-                placeholder="Telegram chat ID"
-                aria-label="Telegram chat ID"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
-              />
-              <button
-                type="submit"
-                className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-              >
-                Добавить
-              </button>
-            </form>
+            {!isAssistant && (
+              <form onSubmit={addRecipient} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Имя (Юрист Эдуард)"
+                  aria-label="Имя получателя"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+                />
+                <input
+                  type="text"
+                  value={newChatId}
+                  onChange={(e) => setNewChatId(e.target.value)}
+                  placeholder="Telegram chat ID"
+                  aria-label="Telegram chat ID"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-400"
+                />
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                >
+                  Добавить
+                </button>
+              </form>
+            )}
 
             <div className="mt-3 flex items-center gap-3">
               <button
@@ -354,6 +523,37 @@ export default function SettingsPage({
                 >
                   {testResult}
                 </span>
+              )}
+            </div>
+          </section>
+
+          {/* Import / export */}
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold">Данные</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Экспорт клиентов в CSV или импорт из CSV (колонки:{" "}
+              {EXPORT_COLUMNS.join(", ")}).
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={exportCsv}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Экспорт в CSV
+              </button>
+              <label className="inline-block cursor-pointer rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                {importing ? "Импорт…" : "Импорт из CSV"}
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  disabled={importing}
+                  onChange={handleImportSelect}
+                />
+              </label>
+              {importSummary && (
+                <span className="text-sm text-slate-600">{importSummary}</span>
               )}
             </div>
           </section>

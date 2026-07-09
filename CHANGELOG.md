@@ -2,6 +2,40 @@
 
 Формат дат: YYYY-MM-DD. Версии соответствуют этапам ТЗ, не npm-релизам.
 
+## v0.5 — 2026-07-09
+
+**Header + roles + import/export + analytics placeholder + tests**
+
+- Header: avatar/initials + name + role badge (`UserChip`), links to Settings;
+  avatar upload is real Supabase Storage (bucket `avatars`, public, per-user
+  folder RLS) — not a name-only stub like case documents
+- Roles `admin`/`lawyer`/`assistant` (`profiles.role`, default `lawyer`).
+  Not self-editable in the UI (would let a user escalate themselves); real
+  enforcement, not just hidden buttons:
+  - `forbid_assistant_delete` trigger blocks assistant soft-deletes at the
+    DB level — verified via direct SQL role simulation (raises
+    `insufficient_privilege`, independent of any UI)
+  - RLS on `notification_recipients`/`account_settings` blocks assistant
+    writes; normal client edits/status changes remain allowed
+  - Settings UI hides delete/recipient-management controls for assistants
+    (UX only — the trigger/RLS above is the actual boundary)
+- CSV import/export (Settings → Данные): export current clients with matter
+  fields; import validates name+phone and reuses the same `createClient`
+  path as the quick-add form, so imported rows get the same history/RLS
+  treatment. `src/lib/csv.ts` — no new dependency
+- `#/analytics` — explicit "в разработке" placeholder, no fabricated charts
+  or numbers
+- Vitest added: 23 unit tests (localStorage provider CRUD/migration, CSV
+  round-trip, date/overdue helpers) — `npm test`. Root-caused and fixed a
+  Vitest v4 + Node 22+ jsdom/localStorage global-shadowing conflict
+  (documented in `src/test/setup.ts` and the `test` npm script)
+- Found and fixed a real pre-existing bug while testing: `SettingsPage`'s
+  early `return` skipped the shared `<Toast>` render, so every settings
+  toast (save profile, export, import, avatar upload) silently never
+  appeared — not something this session introduced, but caught here
+- Verified live: CSV import round-tripped into PostgreSQL, avatar public
+  URL returns 200, role-based UI gating for assistant, migration 005 applied
+
 ## v0.4 — 2026-07-09
 
 **Matter model + legal reference dictionaries**

@@ -128,11 +128,15 @@ export type AppData = {
   risks: MatterRisk[];
 };
 
+export type UserRole = "admin" | "lawyer" | "assistant";
+
 export type Profile = {
   id: string;
   email: string;
   fullName?: string;
   companyName?: string;
+  avatarUrl?: string;
+  role: UserRole;
 };
 
 export type AccountSettings = {
@@ -161,9 +165,20 @@ export type NotificationEvent = {
   sentAt?: string;
 };
 
+// base fields from the quick-add form + everything importable from CSV
 export type NewClientInput = {
   name: string;
   phone: string;
   status: ClientStatus;
   note?: string;
+  email?: string;
+  telegram?: string;
+  responsibleLawyer?: string;
+  priority?: ClientPriority;
+  matterTitle?: string;
+  matterType?: string;
+  matterSubject?: string;
+  stage?: string;
+  counterparty?: string;
+  keyDeadline?: string;
 };

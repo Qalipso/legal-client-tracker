@@ -52,6 +52,7 @@ export interface DataProvider {
     fullName?: string;
     companyName?: string;
   }): Promise<Profile>;
+  uploadAvatar(file: File): Promise<Profile>;
   getAccountSettings(): Promise<AccountSettings>;
   updateAccountSettings(settings: AccountSettings): Promise<AccountSettings>;
   listRecipients(): Promise<NotificationRecipient[]>;

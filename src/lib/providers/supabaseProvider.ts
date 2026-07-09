@@ -182,6 +182,16 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
           phone: input.phone.trim(),
           status: input.status,
           comment: input.note?.trim() || null,
+          email: input.email?.trim() || null,
+          telegram: input.telegram?.trim() || null,
+          responsible_lawyer: input.responsibleLawyer?.trim() || null,
+          priority: input.priority || null,
+          matter_title: input.matterTitle?.trim() || null,
+          matter_type: input.matterType || null,
+          matter_subject: input.matterSubject?.trim() || null,
+          stage: input.stage || null,
+          counterparty: input.counterparty?.trim() || null,
+          key_deadline: input.keyDeadline || null,
         })
         .select("id")
         .single();
@@ -323,6 +333,8 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
         email: data?.email ?? auth.user?.email ?? "",
         fullName: data?.full_name ?? undefined,
         companyName: data?.company_name ?? undefined,
+        avatarUrl: data?.avatar_url ?? undefined,
+        role: data?.role ?? "lawyer",
       };
     },
 
@@ -337,6 +349,27 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
           company_name: patch.companyName?.trim() || null,
           updated_at: new Date().toISOString(),
         })
+        .eq("id", uid);
+      if (error) throw error;
+      return this.getProfile();
+    },
+
+    async uploadAvatar(file: File) {
+      const { data: auth } = await sb.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("not authenticated");
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${uid}/avatar.${ext}`;
+      const { error: uploadError } = await sb.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true, cacheControl: "3600" });
+      if (uploadError) throw uploadError;
+      const { data: pub } = sb.storage.from("avatars").getPublicUrl(path);
+      // cache-bust so the header picks up the new photo immediately
+      const avatarUrl = `${pub.publicUrl}?t=${Date.now()}`;
+      const { error } = await sb
+        .from("profiles")
+        .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
         .eq("id", uid);
       if (error) throw error;
       return this.getProfile();

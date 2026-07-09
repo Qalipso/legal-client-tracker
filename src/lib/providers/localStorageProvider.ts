@@ -289,6 +289,16 @@ export const localStorageProvider: DataProvider = {
         phone: input.phone.trim(),
         status: input.status,
         note: input.note?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        telegram: input.telegram?.trim() || undefined,
+        responsibleLawyer: input.responsibleLawyer?.trim() || undefined,
+        priority: input.priority,
+        matterTitle: input.matterTitle?.trim() || undefined,
+        matterType: input.matterType,
+        matterSubject: input.matterSubject?.trim() || undefined,
+        stage: input.stage,
+        counterparty: input.counterparty?.trim() || undefined,
+        keyDeadline: input.keyDeadline,
         createdAt: now,
         updatedAt: now,
       };
@@ -407,11 +417,26 @@ export const localStorageProvider: DataProvider = {
     Promise.resolve({
       id: "demo",
       email: "demo@local",
+      role: "lawyer",
       ...readJson<Partial<Profile>>(`${SETTINGS_KEY}:profile`, {}),
     } as Profile),
 
-  updateProfile(patch) {
-    writeJson(`${SETTINGS_KEY}:profile`, patch);
+  async updateProfile(patch) {
+    const current = readJson<Partial<Profile>>(`${SETTINGS_KEY}:profile`, {});
+    writeJson(`${SETTINGS_KEY}:profile`, { ...current, ...patch });
+    return this.getProfile();
+  },
+
+  async uploadAvatar(file: File) {
+    // demo-mode: no real storage, just a data URL kept in localStorage
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const current = readJson<Partial<Profile>>(`${SETTINGS_KEY}:profile`, {});
+    writeJson(`${SETTINGS_KEY}:profile`, { ...current, avatarUrl: dataUrl });
     return this.getProfile();
   },
 

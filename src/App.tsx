@@ -5,6 +5,7 @@ import type {
   ClientPatch,
   ClientStatus,
   NewClientInput,
+  Profile,
   ReferenceData,
 } from "./types/client";
 import { getProvider } from "./lib/providers";
@@ -21,6 +22,8 @@ import ClientDetails from "./components/ClientDetails";
 import Toast from "./components/Toast";
 import AuthPage from "./components/AuthPage";
 import SettingsPage from "./components/SettingsPage";
+import AnalyticsPage from "./components/AnalyticsPage";
+import UserChip from "./components/UserChip";
 
 type ViewMode = "table" | "board";
 
@@ -93,6 +96,7 @@ function MainApp() {
   const [data, setData] = useState<AppData>(emptyData);
   const [referenceData, setReferenceData] =
     useState<ReferenceData>(emptyReferenceData);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [view, setView] = useState<ViewMode>(
@@ -116,6 +120,7 @@ function MainApp() {
     // reference dictionaries are static per session — fetched once, not
     // re-pulled on every mutation like AppData
     provider.getReferenceData().then(setReferenceData).catch(() => {});
+    provider.getProfile().then(setProfile).catch(() => {});
   }, [provider]);
 
   useEffect(() => {
@@ -160,6 +165,10 @@ function MainApp() {
   }
 
   function handleDelete(id: string) {
+    if (profile?.role === "assistant") {
+      setToast("Недостаточно прав: ассистент не может удалять клиентов");
+      return;
+    }
     const client = data.clients.find((c) => c.id === id);
     if (!client) return;
     if (!window.confirm(`Удалить клиента «${client.name}»?`)) return;
@@ -251,21 +260,65 @@ function MainApp() {
   const selectedClient =
     data.clients.find((c) => c.id === selectedId) ?? null;
 
+  // fix: SettingsPage/AnalyticsPage used to `return` early, which skipped
+  // the shared <Toast> render below — toasts fired from Settings (save
+  // profile, export/import, avatar upload) silently never appeared
   if (route === "#/settings") {
     return (
-      <SettingsPage
-        provider={provider}
-        onBack={() => navigate("")}
-        onLogout={handleLogout}
-        onToast={setToast}
-      />
+      <>
+        <SettingsPage
+          provider={provider}
+          onBack={() => navigate("")}
+          onLogout={handleLogout}
+          onToast={setToast}
+          onProfileChange={setProfile}
+        />
+        {toast && <Toast message={toast} onDismiss={dismissToast} />}
+      </>
     );
+  }
+
+  if (route === "#/analytics") {
+    return <AnalyticsPage onBack={() => navigate("")} />;
   }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <header className="flex flex-col gap-4">
+          <div className="flex items-start justify-between">
+            <UserChip
+              profile={profile}
+              onClick={() => navigate("#/settings")}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => navigate("#/analytics")}
+                aria-label="История и аналитика"
+                title="История и аналитика"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
+              >
+                📊
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("#/settings")}
+                aria-label="Настройки"
+                title="Настройки"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
+              >
+                ⚙
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowForm((v) => !v)}
+                className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700"
+              >
+                {showForm ? "Скрыть форму" : "+ Добавить клиента"}
+              </button>
+            </div>
+          </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
               Legal Client Tracker
@@ -273,24 +326,6 @@ function MainApp() {
             <p className="mt-1 text-sm text-slate-500">
               Доска ведения дел: клиенты, статусы, история и следующие шаги.
             </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("#/settings")}
-              aria-label="Настройки"
-              title="Настройки"
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
-            >
-              ⚙
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm((v) => !v)}
-              className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700"
-            >
-              {showForm ? "Скрыть форму" : "+ Добавить клиента"}
-            </button>
           </div>
         </header>
 
