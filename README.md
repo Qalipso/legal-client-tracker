@@ -6,6 +6,35 @@
 
 Клиент пришёл → дело взяли в работу → запросили документы → ждём клиента → закрыли дело.
 
+## Скриншоты
+
+**Доска дел** — канбан по 4 статусам, live-счётчики, поиск/фильтр. Тёмная тема
+слева, светлая справа — обе полноценные, не «затемнённый CSS поверх светлой»:
+
+<p>
+  <img src="docs/screenshots/board-dark.png" alt="Доска дел — тёмная тема" width="49%" />
+  <img src="docs/screenshots/board-light.png" alt="Доска дел — светлая тема" width="49%" />
+</p>
+
+**Табличный вид** — та же доска, но построчно: удобнее, когда дел много и нужно
+сравнивать/сортировать, а не листать канбан:
+
+<img src="docs/screenshots/table-light.png" alt="Табличный вид" width="100%" />
+
+**Карточка дела (drawer)** — открывается по клику на клиента. Каждая секция
+(сводка дела, стороны, задачи, контрольные сроки, риски, заметки, документы,
+история) — отдельный визуальный блок, а не сплошная стена текста:
+
+<p>
+  <img src="docs/screenshots/drawer-light.png" alt="Карточка дела — светлая тема" width="49%" />
+  <img src="docs/screenshots/drawer-dark.png" alt="Карточка дела — тёмная тема" width="49%" />
+</p>
+
+**Настройки** — профиль, уведомления (Telegram + email), получатели,
+импорт/экспорт CSV, `.ics`-экспорт календаря, история отправок:
+
+<img src="docs/screenshots/settings-light.png" alt="Настройки" width="100%" />
+
 ## Live Demo
 
 **https://legal-client-tracker.vercel.app**
@@ -28,7 +57,7 @@ Dashboard → Authentication → Add user, автоподтверждён).
 - [docs/setup.md](docs/setup.md) — локальный запуск, Supabase с нуля, Telegram-бот, Vercel deploy
 - [docs/notifications.md](docs/notifications.md) — контракт edge function, события, журнал доставки
 - [docs/qa/ui-test-plan.md](docs/qa/ui-test-plan.md) — план UI-тестирования (desktop/mobile), найденные и исправленные баги
-- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v0.5.4
+- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v0.7
 
 ## Features
 
@@ -51,8 +80,9 @@ Dashboard → Authentication → Add user, автоподтверждён).
   ответ на претензию, оплата и т.д.), отдельно от быстрых задач
 - **Риски / открытые вопросы** — список с отметкой «решено»
 - Заметки — сохраняются в историю дела
-- Документы — имя файла + **тип и статус документа** из справочников
-  (в проде — Supabase Storage / S3 вместо имени)
+- Документы — реальная загрузка в приватный Supabase Storage (не только
+  имя файла), **тип и статус документа** из справочников, скачивание через
+  60-секундные signed URL
 - История дела — единый timeline всех событий; история статусов — его срез
 
 **Auth и приватность данных (v0.3)**
@@ -65,28 +95,34 @@ Dashboard → Authentication → Add user, автоподтверждён).
 - Новый пользователь видит welcome empty state, а не чужие данные
 
 **Настройки аккаунта (`#/settings`)**
-- Профиль: имя, компания, email (readonly), выход
-- Уведомления: Telegram вкл/выкл + тумблеры по событиям (новый клиент,
-  просроченная задача, смена статуса)
-- Получатели: список Telegram chat ID (имя + chat_id + активность),
-  добавление/отключение/удаление, «Отправить тест»
+- Профиль: имя, компания, email (readonly), фото (реальная загрузка в
+  Supabase Storage), выход
+- Светлая/тёмная тема — переключатель, localStorage + system-preference
+- Уведомления: Telegram и Email вкл/выкл + тумблеры по событиям (новый
+  клиент, просроченная задача, смена статуса)
+- Получатели: Telegram chat ID и/или email-адреса (имя + канал +
+  активность), добавление/отключение/удаление, «Отправить тест»
+- Импорт/экспорт CSV, `.ics`-экспорт открытых задач и сроков в календарь
 - История уведомлений: последние попытки с статусами sent / error / skipped
 
-**Telegram-уведомления (per-user routing)**
-- События: `client.created`, `task.created`, `status.changed` отправляются
-  fire-and-forget из UI; `task.overdue` поддержан схемой/настройками
-  (автоотправка по расписанию — next step)
-- Edge Function получает JWT пользователя → определяет auth.uid() → читает
-  его настройки и активных получателей → шлёт всем → пишет каждую попытку
-  в `notification_events` (status, error, payload, sent_at)
-- Токен бота только в секретах Supabase (`TG_BOT_TOKEN`); нет получателей
-  или токена → `{"skipped": true, "reason": ...}`, UI не ломается
-- **Бот отвечает на `/start`** (`telegram-webhook`, v0.5.1): пишешь боту —
-  он присылает в ответ твой chat ID, готовый для вставки в настройки; больше
-  не нужен сторонний @userinfobot
-- Настройка: @BotFather → токен в секреты → задеплоить обе функции →
-  зарегистрировать webhook → написать боту `/start` → скопировать chat ID →
-  в `#/settings` добавить получателя → «Отправить тест»
+**Уведомления (Telegram + Email, per-user routing)**
+- События: `client.created`, `task.created`, `status.changed`,
+  `task.overdue` отправляются на все включённые каналы получателя
+- `task.overdue` — автоматически, раз в день (pg_cron → Edge Function),
+  не нужно ничего нажимать
+- Email без явного получателя по умолчанию идёт на почту аккаунта — не
+  нужно ничего донастраивать, чтобы получать уведомления себе
+- Edge Function получает JWT пользователя (или internal secret для cron)
+  → определяет владельца → читает его настройки и активных получателей →
+  шлёт по каждому каналу → пишет каждую попытку в `notification_events`
+  (status, error, payload, sent_at)
+- Секреты (`TG_BOT_TOKEN`, `RESEND_API_KEY`) только в Supabase secrets; нет
+  получателей/токена/ключа → `{"skipped"/"error": ...}`, UI не ломается
+- **Бот отвечает на `/start`** (`telegram-webhook`): пишешь боту — он
+  присылает в ответ твой chat ID, готовый для вставки в настройки
+- Настройка: @BotFather → токен в секреты → задеплоить функции →
+  зарегистрировать webhook → написать боту `/start` → скопировать chat ID
+  → в `#/settings` добавить получателя → «Отправить тест»
 
 **Справочники (v0.4)**
 - Типы дел, стадии дел, типы документов, статусы документов, типы сроков —
@@ -124,36 +160,9 @@ Dashboard → Authentication → Add user, автоподтверждён).
 
 ## Stack
 
-- React 19 + TypeScript (Vite)
-- Tailwind CSS v4 — светлая/тёмная тема (`.dark` класс, localStorage +
-  system-preference по умолчанию), переключатель в шапке
-- **Supabase (PostgreSQL)** — основное хранилище; схема в `supabase/migrations/`
-- **localStorage fallback** — demo/dev-режим, если Supabase env не задан
-- **Vercel** — прод задеплоен: https://legal-client-tracker.vercel.app
-
-## Architecture
-
-Подробная версия с ADR и trade-offs: [docs/architecture.md](docs/architecture.md).
-Кратко: UI никогда не обращается к хранилищу напрямую — только через repository layer:
-
-```
-UI (Board / Table / Drawer / Settings / Auth)
-  └── App state  →  DataProvider interface (src/lib/providers/types.ts)
-        ├── supabaseProvider     — если заданы VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
-        └── localStorageProvider — demo-mode fallback (без авторизации, v1→v4 миграции данных)
-```
-
-Каждая мутация провайдера сама пишет своё событие в `case_history` (activity log)
-и возвращает свежий снимок данных. Клиенты удаляются мягко (`deleted_at`), история
-дела сохраняется. Все пользовательские таблицы защищены RLS
-(`user_id = auth.uid()`) — данные разных юристов изолированы на уровне БД, не
-на уровне кода. Уведомления идут через Edge Function, которая резолвит
-`auth.uid()` из JWT пользователя (подробности — [docs/notifications.md](docs/notifications.md)).
-
-Настройка Supabase: создать проект → по порядку выполнить
-`supabase/migrations/001…005*.sql` → `supabase/seed.sql` (опционально) →
-заполнить `.env` по образцу `.env.example`. Подробный гайд:
-[docs/setup.md](docs/setup.md).
+React 19 + TypeScript (Vite) + Tailwind CSS v4 · Supabase (PostgreSQL, Auth,
+Storage, Edge Functions, pg_cron) как основное хранилище, localStorage —
+demo/dev fallback · Vercel (прод) · Vitest + Playwright.
 
 ## Run locally
 
@@ -165,96 +174,17 @@ npm test         # vitest — providers, csv, date/overdue helpers, ics
 npm run test:e2e # playwright — board UI, against localStorage demo-mode
 ```
 
-## Project structure
+Настройка Supabase с нуля (проект → миграции → `.env` → Telegram-бот →
+Vercel): [docs/setup.md](docs/setup.md).
 
-```
-src/
-  components/
-    AuthPage.tsx      # login / signup
-    BoardView.tsx     # kanban columns + case cards, drag-and-drop
-    ClientDetails.tsx # drawer: info, edit, timeline, notes, tasks, files
-    ClientForm.tsx    # add-client form with validation
-    ClientTable.tsx   # table view
-    SettingsPage.tsx  # profile+avatar+role, notifications, recipients,
-                      # import/export CSV, history
-    AnalyticsPage.tsx # "История и аналитика" — honest placeholder
-    UserChip.tsx      # header avatar + name + role badge
-    StatusCards.tsx   # counters per status
-    Filters.tsx       # search + status filter
-    Toast.tsx
-    ThemeToggle.tsx   # light/dark switch (localStorage + system default)
-  lib/
-    supabaseClient.ts # singleton Supabase client (null → demo-mode)
-    providers/        # DataProvider interface + supabase / localStorage impls
-    notify.ts         # fire-and-forget event notifications (user JWT)
-    clients.ts        # date/overdue/next-task helpers
-    csv.ts            # minimal CSV parse/serialize (no dependency)
-    matterReference.ts # static reference dictionaries for demo-mode
-    statuses.ts       # status labels, order, visual identity (incl. dark variants)
-    theme.ts          # light/dark theme store
-  types/client.ts     # domain types
-  App.tsx             # AuthGate + hash routing + state owner
-supabase/
-  migrations/         # 001 schema · 002 settings (superseded by 003) ·
-                      # 003 auth + RLS + profiles/account_settings ·
-                      # 004 matter model + reference dictionaries ·
-                      # 005 roles (admin/lawyer/assistant) + avatars storage ·
-                      # 006 case-documents storage · 007 pg_cron overdue
-                      # scheduler · 008 email channel
-  functions/
-    notify-telegram/  # per-user + cron Telegram/email routing + events log
-    telegram-webhook/  # bot inbound webhook — replies to /start with chat_id
-  seed.sql
-docs/                 # architecture · security · features · setup ·
-                      # notifications · qa/ui-test-plan · onboarding-email-draft ·
-                      # brand/ (Elly bot character card + avatar prompts)
-e2e/                  # Playwright — board.spec.ts + fixtures.ts (localStorage
-                      # demo-mode, no live Supabase session needed)
-playwright.config.ts
-```
+## Технические решения
 
-## Data model
-
-Полная схема с типами колонок и RLS — в `supabase/migrations/`. Сокращённая
-доменная модель (TypeScript, `src/types/client.ts`):
-
-```ts
-Client          { id, name, phone, email?, telegram?, status, note?, priority?,
-                   responsibleLawyer?, matterTitle?, matterType?, matterSubject?,
-                   stage?, counterparty?, keyDeadline?, createdAt, updatedAt, deletedAt? }
-CaseHistoryItem { id, clientId, type: client_created|client_updated|note_added|
-                   status_changed|task_created|task_completed|attachment_added,
-                   text, metadata?, createdAt }
-Task            { id, clientId, title, dueDate?, completed, completedAt?, createdAt }
-MatterDeadline  { id, clientId, deadlineType?, title, dueDate, completed, note?, createdAt }
-MatterRisk      { id, clientId, text, isResolved, createdAt, resolvedAt? }
-Attachment      { id, clientId, fileName, documentType?, documentStatus?, uploadedAt }
-ReferenceItem   { code, label }  // matter types/stages, document types/statuses, deadline types
-Profile, AccountSettings, NotificationRecipient, NotificationEvent  // account & notifications
-```
-
-Все события дела пишутся в единый timeline (`CaseHistoryItem`), история статусов —
-это его срез по `type === "status_changed"`. `Task` (быстрые действия) и
-`MatterDeadline` (типизированные юридические сроки) — сознательно разные
-сущности: первые — ad-hoc «позвонить/проверить», вторые — формальные сроки
-с типом из справочника.
-
-## Key decisions & trade-offs
-
-- **Supabase как основное хранилище, localStorage — только demo-режим** —
-  начинали с localStorage-first MVP (v0.1), в v0.2 перешли на Supabase через
-  repository layer без переписывания UI; localStorage остался fallback'ом,
-  когда `VITE_SUPABASE_*` не заданы (без авторизации).
-- **RLS вместо фильтрации в коде** — `user_id = auth.uid()` на каждой
-  пользовательской таблице; владение данными гарантирует БД, а не дисциплина
-  разработчика. Изоляция проверена симуляцией ролей (см. docs/architecture.md).
-- **Inline form (not modal)** — fewer moving parts, better on mobile, same UX value.
-- **`window.confirm` for delete** — native, accessible, zero code; a styled dialog is polish
-  the MVP doesn't need.
-- **Search matches status labels too** — "в работе" in the search box works as users expect.
-- **Matter model расширяет `clients`, а не заводит отдельную таблицу** —
-  меньше миграций и join'ов; `tasks`/`case_history`/`attachments` не
-  потребовали изменений при переходе на модель дела (v0.4).
+UI никогда не обращается к хранилищу напрямую — только через repository
+layer (`DataProvider`), поэтому localStorage-fallback и Supabase-provider
+взаимозаменяемы без переписывания компонентов. Компоненты, схема данных,
+codebase map, ADR (почему RLS вместо фильтров в коде, почему matter model
+расширяет `clients`, почему `.ics`-экспорт вместо OAuth и т.д.) и trade-offs —
+всё в отдельном документе, а не здесь: **[docs/architecture.md](docs/architecture.md)**.
 
 ## Next steps
 

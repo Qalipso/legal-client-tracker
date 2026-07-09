@@ -1,7 +1,9 @@
-# Architecture — Legal Client Tracker
+# Architecture & Technical Decisions — Legal Client Tracker
 
-> Отражает состояние кода на v0.3 (commit `c45ed63`). Каждый пункт помечен
-> `[Implemented]` (есть в коде, путь указан) или `[Planned]` (намерение).
+> Отражает состояние кода на v0.7. Каждый пункт помечен `[Implemented]`
+> (есть в коде, путь указан) или `[Planned]` (намерение, ещё не сделано).
+> Стек и высокоуровневые фичи — в [README.md](../README.md); здесь —
+> компоненты, схема данных, ADR и trade-offs, для кого интересны детали.
 
 ## 1. System Context
 
@@ -10,120 +12,237 @@
 │   Browser    │────────────────────────────────▶│  Supabase               │
 │  React SPA   │                                 │  ├─ Auth (GoTrue)       │
 │  (Vercel)    │──── POST /functions/v1/ ───────▶│  ├─ PostgreSQL + RLS    │
-└──────────────┘     notify-telegram             │  └─ Edge Function       │
-       │                                         └───────────┬─────────────┘
-       │ demo-mode fallback                                  │ Bot API
-       ▼                                                     ▼
-  localStorage                                     Telegram (получатели)
+└──────────────┘     notify-telegram             │  ├─ Storage (avatars,   │
+       │                                         │  │  case-documents)     │
+       │ demo-mode fallback                      │  ├─ pg_cron (task.overdue)│
+       ▼                                         │  └─ Edge Functions      │
+  localStorage                                   └───────┬─────────┬───────┘
+                                                          │         │
+                                                    Bot API    Resend API
+                                                          │         │
+                                                          ▼         ▼
+                                                     Telegram    Email
 ```
 
-Актор — юрист (один пользователь = один аккаунт, ролей нет). Внешние системы:
-Supabase (auth + данные + функция), Telegram Bot API (уведомления).
-Граница доверия: браузер владеет только anon key + JWT пользователя;
-`TG_BOT_TOKEN` и `service_role` живут исключительно в Edge Function
-(секреты Supabase).
+Актор — юрист (`admin`/`lawyer`/`assistant`, без team workspace — см. §7).
+Внешние системы: Supabase (auth + данные + функции + cron + storage),
+Telegram Bot API, Resend (email). Граница доверия: браузер владеет только
+anon key + JWT пользователя; `TG_BOT_TOKEN`, `RESEND_API_KEY` и
+`service_role` живут исключительно в Edge Function secrets.
 
-## 2. Components
+## 2. Stack
+
+- React 19 + TypeScript (Vite), Tailwind CSS v4
+- Светлая/тёмная тема — class-based dark mode (`@custom-variant dark`),
+  `src/lib/theme.ts` (localStorage + system-preference), flash-free via
+  инлайн-скрипт в `index.html`
+- **Supabase (PostgreSQL)** — основное хранилище; схема в `supabase/migrations/`
+- **localStorage fallback** — demo/dev-режим, если `VITE_SUPABASE_*` не задан
+- **Vercel** — прод: https://legal-client-tracker.vercel.app
+- Vitest (unit) + Playwright (E2E, против localStorage demo-режима)
+
+## 3. Components
 
 | Компонент | Путь | Ответственность | Статус |
 |---|---|---|---|
 | Root / AuthGate | `src/App.tsx` | сессия Supabase Auth; без сессии → AuthPage; demo-mode без env — без auth | `[Implemented]` |
-| MainApp | `src/App.tsx` | владелец состояния: AppData, hash-роутинг (`#/settings`), поиск/фильтры, все мутации через провайдер | `[Implemented]` |
-| AuthPage | `src/components/AuthPage.tsx` | login / signup / ошибки / подсказка о подтверждении email | `[Implemented]` |
-| BoardView | `src/components/BoardView.tsx` | канбан по статусам, drag-and-drop карточек (HTML5 DnD), подсветка просрочки | `[Implemented]` |
+| MainApp | `src/App.tsx` | владелец состояния: AppData, hash-роутинг, поиск/фильтры, все мутации через провайдер | `[Implemented]` |
+| AuthPage | `src/components/AuthPage.tsx` | login / signup / ошибки / подтверждение email | `[Implemented]` |
+| BoardView | `src/components/BoardView.tsx` | канбан по статусам, drag-and-drop, подсветка просрочки | `[Implemented]` |
 | ClientTable | `src/components/ClientTable.tsx` | табличный вид, клик по имени открывает drawer | `[Implemented]` |
-| ClientDetails | `src/components/ClientDetails.tsx` | drawer дела: инфо, редактирование, заметки, задачи, документы (имя файла), timeline, история статусов | `[Implemented]` |
-| SettingsPage | `src/components/SettingsPage.tsx` | профиль, тумблеры уведомлений, получатели, тест, история отправок | `[Implemented]` |
+| ClientDetails | `src/components/ClientDetails.tsx` | drawer дела: сводка, стороны, задачи, сроки, риски, заметки, документы, история — каждая секция своя карточка | `[Implemented]` |
+| SettingsPage | `src/components/SettingsPage.tsx` | профиль+аватар+роль, уведомления (Telegram+email), получатели, импорт/экспорт CSV, `.ics`-экспорт, история | `[Implemented]` |
+| AnalyticsPage | `src/components/AnalyticsPage.tsx` | «История и аналитика» — честная заглушка | `[Implemented]` |
+| ThemeToggle | `src/components/ThemeToggle.tsx` | переключатель светлой/тёмной темы | `[Implemented]` |
 | Data layer | `src/lib/providers/types.ts` | интерфейс `DataProvider` — UI не знает источник данных | `[Implemented]` |
 | Supabase provider | `src/lib/providers/supabaseProvider.ts` | PostgREST-доступ; каждая мутация пишет событие в `case_history` | `[Implemented]` |
-| localStorage provider | `src/lib/providers/localStorageProvider.ts` | demo-mode; миграции формата v1→v2→v3; seed | `[Implemented]` |
+| localStorage provider | `src/lib/providers/localStorageProvider.ts` | demo-mode; миграции формата v1→v4; seed-данные | `[Implemented]` |
 | Supabase client | `src/lib/supabaseClient.ts` | модульный синглтон (один GoTrueClient на страницу) | `[Implemented]` |
 | Notify | `src/lib/notify.ts` | fire-and-forget вызов функции с JWT пользователя | `[Implemented]` |
-| Edge Function | `supabase/functions/notify-telegram/index.ts` | per-user маршрутизация Telegram + журнал попыток | `[Implemented]` |
-| Schema | `supabase/migrations/00{1,2,3}_*.sql` | таблицы, RLS, триггер провижининга | `[Implemented]` |
+| notify-telegram | `supabase/functions/notify-telegram/index.ts` | маршрутизация Telegram+email по каналу получателя; auth через JWT или internal_secret (для cron); email по умолчанию шлётся на профильный адрес, если явный получатель не задан | `[Implemented]` |
+| telegram-webhook | `supabase/functions/telegram-webhook/index.ts` | отвечает на `/start`, присылает chat_id | `[Implemented]` |
+| pg_cron scheduler | migration 007, `notify_overdue_items()` | ежедневно (08:00 UTC) находит просроченные task/deadline и шлёт уведомление | `[Implemented]` |
+| Schema | `supabase/migrations/001…008*.sql` | таблицы, RLS, триггеры, storage buckets, cron | `[Implemented]` |
 
-## 3. Data model
+## 4. Data model
 
-Основные таблицы (`001_init.sql`, `003_auth_ownership.sql`):
+Основные таблицы:
 
-- `clients` — карточка дела; `status` check (new / in_progress / waiting_client / closed);
-  soft delete через `deleted_at`; `user_id default auth.uid()`.
-- `case_history` — activity log дела: `client_created, client_updated, note_added,
-  status_changed (metadata {from,to}), task_created, task_completed, attachment_added`.
-- `tasks` — следующие действия; `due_date` + `completed/completed_at`;
-  просрочка вычисляется на клиенте (`src/lib/clients.ts: isOverdue`).
-- `attachments` — MVP: только `file_name`; колонки `file_url/storage_path`
-  заложены под реальную загрузку `[Planned]`.
-- `profiles`, `account_settings` — создаются триггером `handle_new_user`
-  при регистрации.
-- `notification_recipients` — получатели (channel='telegram', destination=chat_id).
-- `notification_events` — журнал попыток: status `sent|error|skipped`,
-  error, payload jsonb, sent_at.
+- `clients` — карточка дела + matter-поля (`matter_title/type/subject/stage/
+  counterparty/key_deadline`); `status` check; soft delete через `deleted_at`;
+  `user_id default auth.uid()`.
+- `case_history` — единый timeline: `client_created, client_updated,
+  note_added, status_changed (metadata {from,to}), task_created,
+  task_completed, attachment_added`. История статусов — его срез по
+  `type='status_changed'`.
+- `tasks` — ad-hoc следующие действия (позвонить/проверить); `due_date` +
+  `completed/completed_at`; просрочка — на клиенте (`src/lib/clients.ts:
+  isOverdue`).
+- `matter_deadlines` — типизированные юридические сроки (процессуальный,
+  ответ на претензию и т.д.) — сознательно отдельная сущность от `tasks`.
+- `matter_risks` — риски/открытые вопросы с отметкой «решено».
+- `attachments` — реальная загрузка в приватный Storage-бакет
+  `case-documents` (не только имя файла); скачивание через 60-секундные
+  signed URL.
+- `matter_types`, `matter_stages`, `document_types`, `document_statuses`,
+  `deadline_types` — глобальные справочники, read-only для всех
+  авторизованных.
+- `profiles`, `account_settings` — создаются триггером при регистрации;
+  `profiles.role` (`admin`/`lawyer`/`assistant`).
+- `notification_recipients` — получатели, `channel` in (`telegram`,
+  `email`).
+- `notification_events` — журнал попыток: `status sent|error|skipped`,
+  `error`, `payload jsonb`, `sent_at`.
+- `internal_secrets` — service_role-only, shared secret для cron→function
+  auth (не читается ни anon, ни authenticated ролью).
 
-RLS: политики `using (user_id = auth.uid())` на всех пользовательских таблицах;
-`notification_events` — select-only для владельца (пишет функция через service role).
+Сокращённая доменная модель (TypeScript, `src/types/client.ts`):
 
-## 4. Data & Control Flow
+```ts
+Client          { id, name, phone, email?, telegram?, status, note?, priority?,
+                   responsibleLawyer?, matterTitle?, matterType?, matterSubject?,
+                   stage?, counterparty?, keyDeadline?, createdAt, updatedAt, deletedAt? }
+CaseHistoryItem { id, clientId, type, text, metadata?, createdAt }
+Task            { id, clientId, title, dueDate?, completed, completedAt?, createdAt }
+MatterDeadline  { id, clientId, deadlineType?, title, dueDate, completed, note?, createdAt }
+MatterRisk      { id, clientId, text, isResolved, createdAt, resolvedAt? }
+Attachment      { id, clientId, fileName, documentType?, documentStatus?, uploadedAt }
+ReferenceItem   { code, label }
+Profile, AccountSettings, NotificationRecipient, NotificationEvent
+```
 
-**Мутация данных (например, смена статуса):**
-UI → `provider.updateClientStatus()` → update `clients` + insert `case_history`
-→ провайдер возвращает свежий `AppData` → `setData` → счётчики/доска
-перерисовываются. При ошибке UI сохраняет прежнее состояние и показывает toast.
+RLS: `using (user_id = auth.uid())` на всех пользовательских таблицах;
+`notification_events`/`overdue_notifications_sent`/`internal_secrets` —
+service_role-only для запись/чтение служебных данных.
 
-**Уведомление:**
+## 5. Data & Control Flow
+
+**Мутация данных** (например, смена статуса): UI → `provider.updateClientStatus()`
+→ update `clients` + insert `case_history` → провайдер возвращает свежий
+`AppData` → перерисовка. При ошибке UI сохраняет прежнее состояние + toast.
+
+**Уведомление (UI-триггер):**
 
 ```
-UI action ──▶ notifyEvent(type, payload)          (fire-and-forget)
-                 │  POST + Authorization: Bearer <user JWT>
+UI action ──▶ notifyEvent(type, payload)          (fire-and-forget, user JWT)
                  ▼
-notify-telegram (Deno):
-  JWT ─▶ auth.uid()
-  auth.uid() ─▶ account_settings (telegram_enabled + тумблер события)
-             ─▶ notification_recipients (active, telegram)
-  для каждого получателя ─▶ Bot API sendMessage
-  каждая попытка ─▶ insert notification_events (service role)
-  нет токена / получателей / выключено ─▶ {skipped, reason}
+notify-telegram:
+  JWT ─▶ auth.uid() ─▶ account_settings (toggles) ─▶ notification_recipients
+  email без явного получателя ─▶ fallback на profiles.email
+  для каждого получателя ─▶ Bot API / Resend API
+  каждая попытка ─▶ insert notification_events
 ```
 
-События: `client.created`, `task.created`, `status.changed` — отправляются из UI
-`[Implemented]`; `test` — из SettingsPage `[Implemented]`; `task.overdue` —
-поддержан схемой и настройками, но автоматического планировщика нет `[Planned]`
-(нужен pg_cron / scheduled function).
+**Уведомление (cron-триггер, task.overdue):** pg_cron → `notify_overdue_items()`
+→ находит просроченные `tasks`/`matter_deadlines` без сегодняшней записи в
+`overdue_notifications_sent` → `net.http_post` в `notify-telegram` с
+`internal_secret`+`user_id` (нет пользовательской сессии) → та же логика
+диспатча по каналам, что и у UI-триггера.
 
-## 5. Decisions (ADR, кратко)
+## 6. Decisions (ADR, кратко)
 
 1. **Repository/provider layer** — UI зависит только от `DataProvider`.
-   *Следствие:* Supabase заменяем на Express/FastAPI без правок компонентов;
-   demo-mode бесплатен. Принято в v0.2.
+   *Следствие:* backend заменяем без правок компонентов; demo-mode бесплатен.
 2. **`user_id default auth.uid()` + RLS вместо фильтров в коде** — владение
-   данными обеспечивает БД, а не дисциплина разработчика. *Следствие:* мутации
-   провайдера не изменились при переходе на multi-user; изоляция проверяется
-   SQL-симуляцией ролей. Принято в v0.3.
-3. **Activity log как единый timeline** (`case_history`), история статусов —
-   его срез по `type='status_changed'`. *Следствие:* аудит и отчёты без
-   дополнительных таблиц; metadata jsonb для машиночитаемых деталей.
-4. **Секреты только server-side** — токен бота недоступен фронтенду в принципе;
-   фронт шлёт JWT, функция резолвит получателей сама. *Отвергнуто:* хранение
-   chat_id/токена в клиенте (утечёт из бандла).
-5. **Hash-роутинг вместо react-router** — одна зависимость меньше для двух
-   экранов. *Следствие:* при росте числа страниц заменить на router `[Planned]`.
+   данными обеспечивает БД. Изоляция проверена SQL-симуляцией ролей.
+3. **Activity log как единый timeline** (`case_history`) — аудит и отчёты
+   без дополнительных таблиц; metadata jsonb для деталей.
+4. **Секреты только server-side** — токен бота/Resend недоступны фронтенду;
+   фронт шлёт JWT, функция резолвит получателей сама.
+5. **Hash-роутинг вместо react-router** — одна зависимость меньше для
+   нескольких экранов.
 6. **Soft delete** (`deleted_at`) — дело можно восстановить, история не теряется.
+7. **Matter model расширяет `clients`, а не заводит отдельную таблицу** —
+   меньше миграций и join'ов; `tasks`/`case_history`/`attachments` не
+   потребовали изменений при переходе на модель дела.
+8. **`.ics`-экспорт вместо Google Calendar OAuth** — односторонний экспорт
+   без регистрации внешнего OAuth-приложения; полноценный two-way sync
+   явно вынесен в Planned, а не изображён готовым.
+9. **pg_cron auth через DB-таблицу секрета, а не Supabase CLI secret** — у
+   агентской тулинг-цепочки нет доступа к `supabase secrets set`; секрет в
+   `internal_secrets` (service_role-only RLS) читается по обе стороны
+   (SQL-функцией и Edge Function через service-role REST).
+10. **Email fallback на `profiles.email`** — тумблер «Email-уведомления
+    включены» без явного получателя интуитивно должен слать на аккаунт
+    владельца, а не молча ничего не делать.
+11. **Inline form (not modal)** — меньше движущихся частей, лучше на mobile.
+12. **`window.confirm` for delete** — нативный, доступный, без кода; кастомный
+    диалог — полировка, которая MVP не нужна.
+13. **Search matches status labels too** — «в работе» в поиске работает,
+    как ожидает пользователь.
 
-## 6. Trade-offs
+## 7. Trade-offs
 
-- **Refetch-all после мутации** (простота > трафик): при каждой записи провайдер
-  перечитывает 4 таблицы. На объёмах юриста (сотни записей) это дешевле, чем
-  кэш-инварианты; при росте — точечные обновления/realtime `[Planned]`.
-- **Permissive email-confirm flow**: Supabase по умолчанию требует подтверждение
-  email; UI honest-сообщает об этом. Отключается в Dashboard → Auth.
-- **task.overdue без планировщика**: подсветка на доске есть, push-уведомление
-  требует cron — осознанно отложено.
+- **Refetch-all после мутации** (простота > трафик): при каждой записи
+  провайдер перечитывает данные заново. На объёмах юриста (сотни записей)
+  это дешевле, чем кэш-инварианты; при росте — точечные обновления/realtime
+  `[Planned]`.
+- **Permissive email-confirm flow**: Supabase по умолчанию требует
+  подтверждение email; UI honest-сообщает об этом.
+- **Роли без team workspace**: `admin`/`lawyer`/`assistant` реально
+  работают на уровне БД (RLS + триггер), но назначаются только напрямую в
+  БД, и ассистент не видит дела «своего» юриста — нет понятия команды.
+  Следующий архитектурный шаг, не текущий.
+- **`verify_jwt: false` на gateway у `notify-telegram`**: необходимо, т.к.
+  `pg_cron`'s `net.http_post` не может слать Authorization header; функция
+  компенсирует собственной проверкой (user JWT ИЛИ internal_secret) — риск
+  осознан и задокументирован в коде функции.
 
-## 7. Open Questions / Planned
+## 8. Codebase map
 
-- Реальная загрузка файлов в Supabase Storage (`storage_path` уже в схеме).
-- Scheduled `task.overdue` (pg_cron + функция) и email reminders.
-- Роли (admin / lawyer / assistant) поверх RLS.
-- Google Calendar integration; realtime-обновления; пагинация.
-- Автотесты: unit на провайдеры, E2E на доску (сейчас — ручная браузерная
-  верификация каждого релиза).
+```
+src/
+  components/
+    AuthPage.tsx      # login / signup
+    BoardView.tsx     # kanban columns + case cards, drag-and-drop
+    ClientDetails.tsx # drawer: info, edit, timeline, notes, tasks, files
+    ClientForm.tsx    # add-client form with validation
+    ClientTable.tsx   # table view
+    SettingsPage.tsx  # profile+avatar+role, notifications, recipients,
+                      # import/export CSV, history
+    AnalyticsPage.tsx # "История и аналитика" — honest placeholder
+    UserChip.tsx      # header avatar + name + role badge
+    StatusCards.tsx   # counters per status
+    Filters.tsx       # search + status filter
+    Toast.tsx
+    ThemeToggle.tsx   # light/dark switch (localStorage + system default)
+  lib/
+    supabaseClient.ts # singleton Supabase client (null → demo-mode)
+    providers/        # DataProvider interface + supabase / localStorage impls
+    notify.ts         # fire-and-forget event notifications (user JWT)
+    clients.ts        # date/overdue/next-task helpers
+    csv.ts            # minimal CSV parse/serialize (no dependency)
+    ics.ts             # RFC 5545 calendar export (no dependency)
+    matterReference.ts # static reference dictionaries for demo-mode
+    statuses.ts       # status labels, order, visual identity (incl. dark variants)
+    theme.ts          # light/dark theme store
+  types/client.ts     # domain types
+  App.tsx             # AuthGate + hash routing + state owner
+supabase/
+  migrations/         # 001 schema · 002 settings (superseded by 003) ·
+                      # 003 auth + RLS + profiles/account_settings ·
+                      # 004 matter model + reference dictionaries ·
+                      # 005 roles (admin/lawyer/assistant) + avatars storage ·
+                      # 006 case-documents storage · 007 pg_cron overdue
+                      # scheduler · 008 email channel
+  functions/
+    notify-telegram/  # per-user + cron Telegram/email routing + events log
+    telegram-webhook/  # bot inbound webhook — replies to /start with chat_id
+  seed.sql
+docs/                 # this file · security · features · setup ·
+                      # notifications · qa/ui-test-plan · onboarding-email-draft ·
+                      # brand/ (Elly bot character card + avatar prompts)
+e2e/                  # Playwright — board.spec.ts + fixtures.ts (localStorage
+                      # demo-mode, no live Supabase session needed)
+playwright.config.ts
+```
+
+## 9. Open Questions / Planned
+
+- Реальные отчёты в «Истории и аналитике» (нагрузка, просрочки, скорость
+  закрытия) — сейчас честная заглушка.
+- Team workspace + назначение ролей из UI.
+- Полноценный Google Calendar OAuth two-way sync (сейчас — `.ics`-экспорт).
+- Реальная доставка email — работает и live-verified (см. CHANGELOG v0.6.1),
+  но зависит от конкретного Resend-аккаунта/домена конечного деплоя.
+- Realtime-обновления, пагинация.
