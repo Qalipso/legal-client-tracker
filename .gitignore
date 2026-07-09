@@ -32,3 +32,8 @@ dist-ssr
 docs/brand/renders/
 .vercel
 .env*
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

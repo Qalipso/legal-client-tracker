@@ -2,6 +2,48 @@
 
 Формат дат: YYYY-MM-DD. Версии соответствуют этапам ТЗ, не npm-релизам.
 
+## v0.6 — 2026-07-09 (`9719807`, `be7f2d2`, ...)
+
+**Все 5 пунктов "Next steps" из v0.5.4**
+
+- **Real file upload для документов дела**: `addAttachment` теперь грузит
+  реальный файл в приватный Storage-бакет `case-documents` (миграция
+  006), а не только имя; скачивание — через 60-секундные signed URL
+  (`getAttachmentUrl`). Проверено live: файл загружен, signed URL отдаёт
+  содержимое, прямой публичный путь возвращает 400 (бакет реально приватный)
+- **Google Calendar integration**: осознанно не полноценный OAuth-sync (для
+  него нужно регистрировать Google Cloud OAuth-приложение), а
+  односторонний `.ics`-экспорт (`src/lib/ics.ts`, RFC 5545, без внешних
+  зависимостей) открытых задач и контрольных сроков — кнопка в Настройки →
+  Данные. 3 unit-теста на генерацию/экранирование/пустой список
+- **task.overdue уведомления**: миграция 007 — `pg_cron` раз в день
+  (08:00 UTC) вызывает `public.notify_overdue_items()`, которая находит
+  просроченные задачи/сроки и шлёт их через `net.http_post` в
+  `notify-telegram`. Auth для cron-вызова (нет пользовательской сессии) —
+  через таблицу `internal_secrets` (service_role-only RLS), а не
+  Supabase CLI secret. **Найден и исправлен баг**: gateway-уровневый
+  `verify_jwt` отклонял cron-вызовы 401 ещё до кода функции, потому что
+  `net.http_post` не может слать Authorization header — обнаружено через
+  `net._http_response`, исправлено редеплоем с `verify_jwt: false`
+  (функция и так сама проверяет либо JWT, либо internal_secret). Проверено
+  сквозным тестом на проде: тестовая просроченная задача → ручной вызов
+  планировщика → `notification_events` показал `status: sent, error: null`
+  (реальная доставка в Telegram) → тестовые данные удалены
+- **Email-канал уведомлений (scaffold)**: миграция 008 — `email` как
+  допустимый `channel` в `notification_recipients` +
+  `account_settings.email_enabled`; `notify-telegram` (v9) теперь шлёт
+  каждому получателю по его каналу (Telegram через Bot API, email через
+  Resend), сбой одного канала не блокирует остальных. Проверено live
+  смешанным тестом: получатель-Telegram доставлен (`delivered: 1`),
+  получатель-email залогирован с честной ошибкой `RESEND_API_KEY /
+  RESEND_FROM_EMAIL не заданы в секретах Supabase`. **[Not verified]**:
+  реальная доставка через Resend — нет аккаунта/API-ключа
+- **E2E-тесты доски (Playwright)**: `npm run test:e2e`, 4 сценария
+  (добавление клиента, смена статуса из таблицы, поиск/фильтр, открытие/
+  закрытие карточки дела) против localStorage demo-режима — без нужды в
+  живой Supabase-сессии. Vitest и Playwright разделены (`vite.config.ts`
+  `test.exclude: ["e2e/**"]`), чтобы не конфликтовали test-раннеры
+
 ## v0.5.4 — 2026-07-09
 
 **Security & Data Protection track + feature inventory**

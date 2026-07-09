@@ -41,7 +41,7 @@
 | Контрольные сроки (типизированные юридические дедлайны) | v0.4 | `ClientDetails.tsx: DeadlinesSection` |
 | Риски / открытые вопросы | v0.4 | `ClientDetails.tsx: RisksSection` |
 | Заметки (попадают в историю дела) | v0.1 | `ClientDetails.tsx: NoteSection` |
-| Документы — имя файла + тип/статус документа | v0.4 | `ClientDetails.tsx: DocumentsSection` |
+| Документы — реальная загрузка в приватный Storage (тип/статус документа) | v0.4→v0.6 | `ClientDetails.tsx: DocumentsSection`, migration 006, `case-documents` bucket |
 | История дела — единый timeline событий | v0.1 | `ClientDetails.tsx: HistorySection` |
 | История изменения статусов (срез истории) | v0.1 | `HistorySection` |
 | Подсветка просроченных сроков/задач | v0.1 | `src/lib/clients.ts: isOverdue` |
@@ -73,15 +73,17 @@
 | Экспорт клиентов в CSV | v0.5 | `SettingsPage.tsx: exportCsv` |
 | История уведомлений (sent/error/skipped + причина) | v0.2.2 | `SettingsPage.tsx: История уведомлений` |
 
-## 6. Уведомления (Telegram)
+## 6. Уведомления (Telegram + email)
 
 | Фича | Версия | Где в коде |
 |---|---|---|
 | Edge Function маршрутизации уведомлений (per-user, по JWT) | v0.2.1→v0.3 | `supabase/functions/notify-telegram` |
-| События: client.created, task.created, status.changed, test | v0.2.1–v0.3 | `notify-telegram/index.ts: buildText` |
+| События: client.created, task.created, status.changed, task.overdue, test | v0.2.1–v0.6 | `notify-telegram/index.ts: buildText` |
 | Журнал попыток отправки (`notification_events`) | v0.3 | migration 003 |
 | Бот отвечает на `/start` — присылает свой chat ID | v0.5.1 | `supabase/functions/telegram-webhook` |
 | Fire-and-forget вызов из UI (не блокирует основной сценарий) | v0.2.1 | `src/lib/notify.ts` |
+| `task.overdue` планировщик (pg_cron, ежедневно 08:00 UTC) | v0.6 | migration 007, `notify_overdue_items()` |
+| Email-канал (получатели, toggle, dispatch через Resend) | v0.6 | migration 008, `notify-telegram/index.ts` — **[Not verified]**: доставка (нет Resend API-ключа) |
 
 ## 7. История и аналитика
 
@@ -109,12 +111,12 @@
 | Unit-тесты провайдера (CRUD, миграция v1) | v0.5 | `src/lib/providers/localStorageProvider.test.ts` |
 | Unit-тесты CSV parse/serialize | v0.5 | `src/lib/csv.test.ts` |
 | Unit-тесты date/overdue helpers | v0.5 | `src/lib/clients.test.ts` |
-| E2E-тесты доски (Playwright) | — | **[Planned]** |
+| Unit-тесты `.ics` генератора | v0.6 | `src/lib/ics.test.ts` |
+| E2E-тесты доски (Playwright, 4 сценария) | v0.6 | `e2e/board.spec.ts` (`npm run test:e2e`) |
 
 ## 10. Что осознанно НЕ реализовано (см. README → Next steps)
 
 - Team workspace / общий доступ ассистента к делам юриста
-- Реальная загрузка содержимого документов дела (сейчас — имя файла)
-- Email-напоминания, Google Calendar
-- Автоматический планировщик для `task.overdue`
+- Реальная доставка email-уведомлений (scaffold готов, нужен Resend API-ключ)
+- Полноценный Google Calendar OAuth-sync (сейчас — односторонний `.ics`-экспорт)
 - Роль/приглашение через UI (сейчас — прямой SQL/Supabase Dashboard)
