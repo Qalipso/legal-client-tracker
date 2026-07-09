@@ -80,10 +80,12 @@
 | Edge Function маршрутизации уведомлений (per-user, по JWT) | v0.2.1→v0.3 | `supabase/functions/notify-telegram` |
 | События: client.created, task.created, status.changed, task.overdue, test | v0.2.1–v0.6 | `notify-telegram/index.ts: buildText` |
 | Журнал попыток отправки (`notification_events`) | v0.3 | migration 003 |
-| Бот отвечает на `/start` — присылает свой chat ID | v0.5.1 | `supabase/functions/telegram-webhook` |
+| Бот отвечает на `/start` — присылает свой chat ID (manual fallback) | v0.5.1 | `supabase/functions/telegram-webhook` |
 | Fire-and-forget вызов из UI (не блокирует основной сценарий) | v0.2.1 | `src/lib/notify.ts` |
 | `task.overdue` планировщик (pg_cron, ежедневно 08:00 UTC) | v0.6 | migration 007, `notify_overdue_items()` |
 | Email-канал (получатели, toggle, dispatch через Resend, верифицированный домен `shatalov.dev`) | v0.6 | migration 008, `notify-telegram/index.ts` |
+| Token-based Telegram connect («📎 Подключить Telegram», без ручного chat ID) | v0.8 | migration 009, `telegram-webhook/index.ts`, `SettingsPage.tsx: connectTelegram` |
+| История уведомлений показывает получателя (имя+канал) для каждой попытки | v0.8 | `SettingsPage.tsx: История уведомлений` |
 
 ## 7. История и аналитика
 

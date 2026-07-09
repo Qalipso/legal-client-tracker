@@ -57,7 +57,7 @@ Dashboard → Authentication → Add user, автоподтверждён).
 - [docs/setup.md](docs/setup.md) — локальный запуск, Supabase с нуля, Telegram-бот, Vercel deploy
 - [docs/notifications.md](docs/notifications.md) — контракт edge function, события, журнал доставки
 - [docs/qa/ui-test-plan.md](docs/qa/ui-test-plan.md) — план UI-тестирования (desktop/mobile), найденные и исправленные баги
-- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v0.7
+- [CHANGELOG.md](CHANGELOG.md) — история версий v0.1 → v0.8
 
 ## Features
 
@@ -118,11 +118,17 @@ Dashboard → Authentication → Add user, автоподтверждён).
   (status, error, payload, sent_at)
 - Секреты (`TG_BOT_TOKEN`, `RESEND_API_KEY`) только в Supabase secrets; нет
   получателей/токена/ключа → `{"skipped"/"error": ...}`, UI не ломается
-- **Бот отвечает на `/start`** (`telegram-webhook`): пишешь боту — он
-  присылает в ответ твой chat ID, готовый для вставки в настройки
-- Настройка: @BotFather → токен в секреты → задеплоить функции →
-  зарегистрировать webhook → написать боту `/start` → скопировать chat ID
-  → в `#/settings` добавить получателя → «Отправить тест»
+- **Подключение Telegram без copy-paste** (v0.8): кнопка «📎 Подключить
+  Telegram» создаёт короткоживущий (10 мин) одноразовый токен → открывает
+  `t.me/<bot>?start=connect_<token>` → бот (`telegram-webhook`) резолвит
+  токен и создаёт получателя сам — пользователь никогда не видит и не
+  копирует chat ID. Токен: crypto-random, single-use, с TTL — все три
+  свойства проверены сквозным тестом на проде (валидный/просроченный/
+  повторно использованный токен), см. CHANGELOG
+- Прежний путь (написать боту `/start` вручную) остаётся рабочим fallback'ом
+  — отвечает голым chat ID для ручного ввода, если токен истёк/потерян
+- Настройка бота с нуля: @BotFather → токен в секреты → задеплоить функции
+  → зарегистрировать webhook (см. [docs/setup.md](docs/setup.md))
 
 **Справочники (v0.4)**
 - Типы дел, стадии дел, типы документов, статусы документов, типы сроков —

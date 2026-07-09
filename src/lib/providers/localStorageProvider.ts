@@ -505,6 +505,15 @@ export const localStorageProvider: DataProvider = {
       ),
     ),
 
+  createTelegramConnectToken() {
+    // No live webhook to consume a token in demo-mode — nothing to connect
+    // to. Callers should hide the "Подключить Telegram" button when
+    // provider.name !== "supabase" rather than call this.
+    return Promise.reject(
+      new Error("Telegram connect недоступен в demo-режиме"),
+    );
+  },
+
   async addAttachment(
     clientId: string,
     file: File,

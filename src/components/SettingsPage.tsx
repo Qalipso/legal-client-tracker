@@ -43,6 +43,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
   assistant: "Ассистент",
 };
 
+const TELEGRAM_BOT_USERNAME = "legalclienttrackerbot";
+
 const EXPORT_COLUMNS = [
   "name",
   "phone",
@@ -82,6 +84,7 @@ export default function SettingsPage({
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   const isAssistant = profile?.role === "assistant";
 
@@ -260,6 +263,36 @@ export default function SettingsPage({
       onToast("Получатель добавлен");
     } catch {
       onToast("Не удалось добавить получателя");
+    }
+  }
+
+  async function connectTelegram() {
+    setConnecting(true);
+    try {
+      const token = await provider.createTelegramConnectToken();
+      window.open(
+        `https://t.me/${TELEGRAM_BOT_USERNAME}?start=connect_${token}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      // Poll for the new recipient — the webhook creates it once the user
+      // taps Start in Telegram, which happens outside this tab.
+      const before = recipients.length;
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const list = await provider.listRecipients().catch(() => null);
+        if (list) {
+          setRecipients(list);
+          if (list.length > before) {
+            onToast("Telegram подключён");
+            break;
+          }
+        }
+      }
+    } catch {
+      onToast("Не удалось начать подключение Telegram");
+    } finally {
+      setConnecting(false);
     }
   }
 
@@ -470,13 +503,25 @@ export default function SettingsPage({
           {/* Recipients */}
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <h2 className="text-base font-semibold">Получатели</h2>
+
+            {!isAssistant && provider.name === "supabase" && (
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={connectTelegram}
+                  disabled={connecting}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+                >
+                  {connecting ? "Ждём подтверждения в Telegram…" : "📎 Подключить Telegram"}
+                </button>
+              </div>
+            )}
+
             <ul className="mt-3 flex flex-col gap-2">
               {recipients.length === 0 && (
                 <li className="text-sm text-slate-400 dark:text-slate-500">
-                  Пока нет получателей. Напишите{" "}
-                  <span className="font-medium text-slate-600 dark:text-slate-300">/start</span>{" "}
-                  своему Telegram-боту — он ответит вашим chat ID (или узнайте
-                  его у{" "}
+                  Пока нет получателей. Нажмите «Подключить Telegram» выше,
+                  или добавьте вручную ниже (например, chat ID, полученный от{" "}
                   <a
                     href="https://t.me/userinfobot"
                     target="_blank"
@@ -645,26 +690,39 @@ export default function SettingsPage({
               {events.length === 0 && (
                 <li className="text-sm text-slate-400 dark:text-slate-500">Пока нет попыток отправки</li>
               )}
-              {events.map((ev) => (
-                <li key={ev.id} className="flex items-center justify-between text-sm">
-                  <span className="text-slate-800 dark:text-slate-200">
-                    {EVENT_LABELS[ev.eventType] ?? ev.eventType}
-                    {ev.error && (
-                      <span className="ml-2 text-xs text-red-500 dark:text-red-400">{ev.error}</span>
-                    )}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGES[ev.status]}`}
-                    >
-                      {ev.status}
+              {events.map((ev) => {
+                const recipient = recipients.find((r) => r.id === ev.recipientId);
+                const recipientLabel = recipient
+                  ? `${recipient.name} (${recipient.channel === "email" ? "email" : "telegram"})`
+                  : ev.channel === "email"
+                    ? "email — на почту аккаунта"
+                    : null;
+                return (
+                  <li key={ev.id} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-800 dark:text-slate-200">
+                      {EVENT_LABELS[ev.eventType] ?? ev.eventType}
+                      {recipientLabel && (
+                        <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">
+                          → {recipientLabel}
+                        </span>
+                      )}
+                      {ev.error && (
+                        <span className="ml-2 text-xs text-red-500 dark:text-red-400">{ev.error}</span>
+                      )}
                     </span>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                      {formatDateTime(ev.createdAt)}
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGES[ev.status]}`}
+                      >
+                        {ev.status}
+                      </span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {formatDateTime(ev.createdAt)}
+                      </span>
                     </span>
-                  </span>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         </main>

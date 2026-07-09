@@ -2,6 +2,39 @@
 
 Формат дат: YYYY-MM-DD. Версии соответствуют этапам ТЗ, не npm-релизам.
 
+## v0.8 — 2026-07-09
+
+**Token-based Telegram connect (без ручного copy-paste chat ID)**
+
+- Пользователь прислал набросок плана из ChatGPT (deep-link `/start
+  connect_xxx`, webhook, connections table, test message, language
+  preference, logs) — сверил с уже реализованным, отбросил дублирующее
+  (`/test` уже есть как кнопка, `notification_channels` уже есть под именем
+  `notification_recipients`, и он уже мультиканальный telegram+email),
+  реализовал реальный gap
+- Миграция 009: `telegram_connect_tokens` — `token` (`gen_random_bytes`,
+  не угадываемый), `user_id`, `expires_at` (TTL 10 минут), `used_at`
+  (single-use). RLS: пользователь создаёт/читает только свои токены;
+  webhook читает/помечает через service-role (RLS не применяется)
+- `telegram-webhook` (v6): `/start connect_<token>` резолвит токен
+  атомарным `PATCH ... where used_at is null and expires_at > now()`
+  (гонка/replay не проходят — PostgREST возвращает 0 строк второму
+  запросу), создаёт `notification_recipients` сам, отвечает подтверждением.
+  Plain `/start` остаётся как fallback (голый chat_id для ручного ввода) —
+  ничего не удалено, только добавлен путь получше
+- `SettingsPage`: кнопка «📎 Подключить Telegram» создаёт токен, открывает
+  `t.me/<bot>?start=connect_<токен>`, поллит получателей 30 секунд
+- **Проверено сквозным тестом на проде** (прямой POST на webhook, как от
+  Telegram): валидный токен → получатель создан ✅; тот же токен повторно →
+  получатель НЕ создан (replay заблокирован) ✅; истёкший токен → получатель
+  НЕ создан (TTL соблюдён) ✅; `get_advisors` — новых security warning нет
+- История уведомлений в Настройках теперь показывает получателя (имя +
+  канал) для каждой попытки — закрывает пункт "logs" из присланного плана
+- **Осознанно не сделано** (из присланного плана): `notification_language`
+  (Auto/RU/EN/ES) — по запросу пользователя, RU-only пока достаточно;
+  `/test` и `/language` как chat-команды бота — уже покрыто кнопкой
+  «Отправить тест» в UI, дублирование не добавляет ценности
+
 ## v0.7 — 2026-07-09
 
 **Светлая и тёмная тема — 2 полноценные цветовые схемы**

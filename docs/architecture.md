@@ -60,9 +60,9 @@ anon key + JWT пользователя; `TG_BOT_TOKEN`, `RESEND_API_KEY` и
 | Supabase client | `src/lib/supabaseClient.ts` | модульный синглтон (один GoTrueClient на страницу) | `[Implemented]` |
 | Notify | `src/lib/notify.ts` | fire-and-forget вызов функции с JWT пользователя | `[Implemented]` |
 | notify-telegram | `supabase/functions/notify-telegram/index.ts` | маршрутизация Telegram+email по каналу получателя; auth через JWT или internal_secret (для cron); email по умолчанию шлётся на профильный адрес, если явный получатель не задан | `[Implemented]` |
-| telegram-webhook | `supabase/functions/telegram-webhook/index.ts` | отвечает на `/start`, присылает chat_id | `[Implemented]` |
+| telegram-webhook | `supabase/functions/telegram-webhook/index.ts` | `/start connect_<token>` — резолвит токен, создаёт получателя (v0.8); plain `/start` — fallback, присылает chat_id для ручного ввода | `[Implemented]` |
 | pg_cron scheduler | migration 007, `notify_overdue_items()` | ежедневно (08:00 UTC) находит просроченные task/deadline и шлёт уведомление | `[Implemented]` |
-| Schema | `supabase/migrations/001…008*.sql` | таблицы, RLS, триггеры, storage buckets, cron | `[Implemented]` |
+| Schema | `supabase/migrations/001…009*.sql` | таблицы, RLS, триггеры, storage buckets, cron | `[Implemented]` |
 
 ## 4. Data model
 
@@ -95,6 +95,11 @@ anon key + JWT пользователя; `TG_BOT_TOKEN`, `RESEND_API_KEY` и
   `error`, `payload jsonb`, `sent_at`.
 - `internal_secrets` — service_role-only, shared secret для cron→function
   auth (не читается ни anon, ни authenticated ролью).
+- `telegram_connect_tokens` — короткоживущий (10 мин), одноразовый токен
+  для подключения Telegram без ручного ввода chat_id (v0.8); `user_id`
+  создаёт свой токен (RLS: `user_id = auth.uid()` на insert/select), сам
+  токен резолвится и помечается использованным через service-role в
+  `telegram-webhook`.
 
 Сокращённая доменная модель (TypeScript, `src/types/client.ts`):
 
@@ -170,6 +175,13 @@ notify-telegram:
     диалог — полировка, которая MVP не нужна.
 13. **Search matches status labels too** — «в работе» в поиске работает,
     как ожидает пользователь.
+14. **Token-based Telegram connect вместо ручного копирования chat_id** (v0.8) —
+    пользователь не должен знать, что такое chat_id, и не должен по нему
+    копипастить между Telegram и приложением. Токен: `gen_random_bytes`
+    (не угадываемый), single-use (`used_at`, PostgREST-условие делает
+    атомарный claim — гонка/replay не проходит), TTL 10 минут. Старый путь
+    (`/start` → голый chat_id в ответ) оставлен как fallback, а не удалён —
+    ничего не сломано для тех, кто уже так подключился.
 
 ## 7. Trade-offs
 
@@ -224,16 +236,20 @@ supabase/
                       # 004 matter model + reference dictionaries ·
                       # 005 roles (admin/lawyer/assistant) + avatars storage ·
                       # 006 case-documents storage · 007 pg_cron overdue
-                      # scheduler · 008 email channel
+                      # scheduler · 008 email channel · 009 telegram connect tokens
   functions/
     notify-telegram/  # per-user + cron Telegram/email routing + events log
-    telegram-webhook/  # bot inbound webhook — replies to /start with chat_id
+    telegram-webhook/  # bot inbound webhook — /start connect_<token> flow +
+                      # plain /start chat_id fallback
   seed.sql
 docs/                 # this file · security · features · setup ·
                       # notifications · qa/ui-test-plan · onboarding-email-draft ·
-                      # brand/ (Elly bot character card + avatar prompts)
+                      # brand/ (Elly bot character card + avatar prompts) ·
+                      # screenshots/ (README images)
 e2e/                  # Playwright — board.spec.ts + fixtures.ts (localStorage
                       # demo-mode, no live Supabase session needed)
+scripts/
+  capture-screenshots.mjs # one-off Playwright script for README screenshots
 playwright.config.ts
 ```
 

@@ -454,6 +454,19 @@ export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
       return (data ?? []).map(mapEvent);
     },
 
+    async createTelegramConnectToken() {
+      const { data: auth } = await sb.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("not authenticated");
+      const { data, error } = await sb
+        .from("telegram_connect_tokens")
+        .insert({ user_id: uid })
+        .select("token")
+        .single();
+      if (error) throw error;
+      return data.token;
+    },
+
     async addAttachment(
       clientId: string,
       file: File,

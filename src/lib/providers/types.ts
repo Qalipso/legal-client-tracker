@@ -71,4 +71,11 @@ export interface DataProvider {
   ): Promise<NotificationRecipient[]>;
   deleteRecipient(id: string): Promise<NotificationRecipient[]>;
   listNotificationEvents(limit?: number): Promise<NotificationEvent[]>;
+
+  // token-based Telegram connect flow (v0.8): mints a short-lived,
+  // single-use token; the caller opens t.me/<bot>?start=connect_<token> and
+  // the telegram-webhook function creates the recipient once the user taps
+  // Start. Not meaningful in localStorage demo-mode (no live webhook to
+  // consume the token) — implementations may throw or no-op there.
+  createTelegramConnectToken(): Promise<string>;
 }
