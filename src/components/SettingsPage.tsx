@@ -465,10 +465,6 @@ export default function SettingsPage({
               {toggle("Просроченная задача", "notifyOnTaskOverdue")}
               {toggle("Смена статуса дела", "notifyOnStatusChanged")}
             </div>
-            <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-              Email-уведомления доставляются через Resend с верифицированного
-              домена.
-            </p>
           </section>
 
           {/* Recipients */}

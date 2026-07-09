@@ -145,7 +145,7 @@ export default function ClientDetails(props: Props) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 p-4 pb-8">
+        <div className="flex flex-col gap-4 p-4 pb-8 sm:p-5">
           {editing ? (
             <EditForm
               client={client}
@@ -195,8 +195,8 @@ function MatterSummarySection({ client, referenceData }: Props) {
     client.keyDeadline && new Date(`${client.keyDeadline}T23:59:59`) < new Date();
 
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Сводка дела
       </h3>
       {!hasMatterData ? (
@@ -242,8 +242,8 @@ function MatterSummarySection({ client, referenceData }: Props) {
 // "Стороны" — доверитель (client contacts) + контрагент
 function PartiesSection({ client }: Props) {
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Стороны
       </h3>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -389,7 +389,7 @@ function EditForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Сводка дела
       </h3>
       {field("Название дела", "matterTitle")}
@@ -428,7 +428,7 @@ function EditForm({
         </div>
       </div>
 
-      <h3 className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      <h3 className="mt-3 mb-1 border-t border-slate-200 pt-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:text-slate-400">
         Стороны
       </h3>
       {field("Имя доверителя *", "name")}
@@ -478,8 +478,8 @@ function TasksSection({ client, tasks, onAddTask, onToggleTask }: Props) {
   }
 
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Следующие действия
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
@@ -574,8 +574,8 @@ function DeadlinesSection({
   }
 
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Контрольные сроки
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
@@ -677,8 +677,8 @@ function RisksSection({ client, risks, onAddRisk, onResolveRisk }: Props) {
   }
 
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Риски / открытые вопросы
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
@@ -737,8 +737,8 @@ function NoteSection({ client, onAddNote }: Props) {
   }
 
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Добавить заметку
       </h3>
       <form onSubmit={submitNote} className="mt-2 flex gap-2">
@@ -787,8 +787,8 @@ function DocumentsSection({
   }
 
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         Документы
       </h3>
       <ul className="mt-2 flex flex-col gap-1.5">
@@ -892,8 +892,8 @@ function HistorySection({ client, history }: Props) {
   );
   return (
     <>
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           История дела
         </h3>
         <ol className="mt-2 flex flex-col gap-2 border-l border-slate-200 pl-4 dark:border-slate-700">
@@ -912,8 +912,8 @@ function HistorySection({ client, history }: Props) {
         </ol>
       </section>
 
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           История статусов
         </h3>
         <ul className="mt-2 flex flex-col gap-1 text-sm">

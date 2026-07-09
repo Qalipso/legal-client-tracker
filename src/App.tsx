@@ -444,11 +444,11 @@ function MainApp() {
           )}
         </main>
 
-        <footer className="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
-          {provider.name === "supabase"
-            ? "Данные хранятся в Supabase (PostgreSQL), доступ только к вашим записям."
-            : "Demo-режим: данные хранятся локально в вашем браузере (localStorage)."}
-        </footer>
+        {provider.name !== "supabase" && (
+          <footer className="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
+            Demo-режим: данные хранятся локально в вашем браузере (localStorage).
+          </footer>
+        )}
       </div>
 
       {selectedClient && (
