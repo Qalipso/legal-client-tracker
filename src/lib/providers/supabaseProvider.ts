@@ -8,6 +8,7 @@ import type {
   ClientStatus,
   HistoryType,
   NewClientInput,
+  NotificationSettings,
   Task,
 } from "../../types/client";
 import type { DataProvider } from "./types";
@@ -228,6 +229,30 @@ export function createSupabaseProvider(
         );
       }
       return fetchAll();
+    },
+
+    async getSettings(): Promise<NotificationSettings> {
+      const { data, error } = await sb
+        .from("settings")
+        .select("telegram_chat_id, notify_on_new_client")
+        .eq("id", 1)
+        .maybeSingle();
+      if (error) throw error;
+      return {
+        telegramChatId: data?.telegram_chat_id ?? undefined,
+        notifyOnNewClient: data?.notify_on_new_client ?? true,
+      };
+    },
+
+    async saveSettings(settings: NotificationSettings) {
+      const { error } = await sb.from("settings").upsert({
+        id: 1,
+        telegram_chat_id: settings.telegramChatId?.trim() || null,
+        notify_on_new_client: settings.notifyOnNewClient,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      return settings;
     },
 
     async addAttachment(clientId: string, fileName: string) {

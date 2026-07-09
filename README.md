@@ -30,13 +30,17 @@
 - Документы — прототип: сохраняется имя файла (в проде — Supabase Storage / S3)
 - История изменения статусов — видно, где дело зависло
 
-**Telegram-уведомления**
-- При добавлении клиента фронт вызывает Supabase Edge Function
-  `notify-telegram` (fire-and-forget — UI не блокируется и не ломается)
+**Telegram-уведомления (настраиваются из UI)**
+- Кнопка ⚙ в шапке → «Уведомления в Telegram»: получатель (chat ID),
+  вкл/выкл уведомлений о новых клиентах, кнопка «Отправить тест»
+- Получатель хранится в БД (таблица `settings`); при добавлении клиента фронт
+  вызывает Supabase Edge Function `notify-telegram` (fire-and-forget — UI не
+  блокируется и не ломается), функция резолвит получателя server-side
 - Токен бота хранится только в секретах Supabase, во фронтенд не попадает
-- Настройка: `supabase secrets set TG_BOT_TOKEN=<token> TG_CHAT_ID=<chat_id>`
-  (или Dashboard → Edge Functions → Secrets); без секретов функция отвечает
-  `{"sent": false}` и приложение работает как обычно
+- Настройка: создать бота у @BotFather → `supabase secrets set TG_BOT_TOKEN=<token>`
+  (или Dashboard → Edge Functions → Secrets) → в приложении задать свой chat ID
+  (узнать: @userinfobot) → «Отправить тест». Без токена/получателя функция
+  отвечает `{"sent": false, "reason": ...}` и приложение работает как обычно
 
 **Base**
 - Add client with inline validation, toast notifications

@@ -6,11 +6,13 @@ import type {
   ClientStatus,
   HistoryType,
   NewClientInput,
+  NotificationSettings,
 } from "../../types/client";
 import type { DataProvider } from "./types";
 import { STATUS_LABELS } from "../statuses";
 
 const STORAGE_KEY = "legal-client-tracker:clients";
+const SETTINGS_KEY = "legal-client-tracker:settings";
 
 const emptyData: AppData = {
   clients: [],
@@ -346,6 +348,25 @@ export const localStorageProvider: DataProvider = {
           : data.history,
       };
     }).then(visible),
+
+  getSettings: () => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) return Promise.resolve(JSON.parse(raw));
+    } catch {
+      // fall through to defaults
+    }
+    return Promise.resolve({ notifyOnNewClient: true });
+  },
+
+  saveSettings: (settings: NotificationSettings) => {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+      // private mode — settings live for the session only
+    }
+    return Promise.resolve(settings);
+  },
 
   addAttachment: (clientId: string, fileName: string) =>
     mutate((data) => ({

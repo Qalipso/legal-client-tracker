@@ -15,6 +15,7 @@ import ClientTable from "./components/ClientTable";
 import BoardView from "./components/BoardView";
 import ClientDetails from "./components/ClientDetails";
 import Toast from "./components/Toast";
+import SettingsPanel from "./components/SettingsPanel";
 
 type ViewMode = "table" | "board";
 
@@ -44,6 +45,7 @@ export default function App() {
     "all",
   );
   const [toast, setToast] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     provider
@@ -139,13 +141,24 @@ export default function App() {
               Доска ведения дел: клиенты, статусы, история и следующие шаги.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowForm((v) => !v)}
-            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700"
-          >
-            {showForm ? "Скрыть форму" : "+ Добавить клиента"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              aria-label="Настройки уведомлений"
+              title="Настройки уведомлений"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
+            >
+              ⚙
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm((v) => !v)}
+              className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-700"
+            >
+              {showForm ? "Скрыть форму" : "+ Добавить клиента"}
+            </button>
+          </div>
         </header>
 
         <main className="mt-6 flex flex-col gap-6">
@@ -247,6 +260,14 @@ export default function App() {
           onAddTask={handleAddTask}
           onToggleTask={handleToggleTask}
           onAddAttachment={handleAddAttachment}
+        />
+      )}
+
+      {showSettings && (
+        <SettingsPanel
+          provider={provider}
+          onClose={() => setShowSettings(false)}
+          onSaved={() => setToast("Настройки сохранены")}
         />
       )}
 

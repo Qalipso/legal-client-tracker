@@ -3,6 +3,7 @@ import type {
   ClientPatch,
   ClientStatus,
   NewClientInput,
+  NotificationSettings,
 } from "../../types/client";
 
 // The UI never talks to Supabase or localStorage directly — only to this
@@ -23,4 +24,6 @@ export interface DataProvider {
   ): Promise<AppData>;
   toggleTask(taskId: string): Promise<AppData>;
   addAttachment(clientId: string, fileName: string): Promise<AppData>;
+  getSettings(): Promise<NotificationSettings>;
+  saveSettings(settings: NotificationSettings): Promise<NotificationSettings>;
 }

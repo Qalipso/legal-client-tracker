@@ -78,6 +78,11 @@ export type AppData = {
   attachments: Attachment[];
 };
 
+export type NotificationSettings = {
+  telegramChatId?: string;
+  notifyOnNewClient: boolean;
+};
+
 export type NewClientInput = {
   name: string;
   phone: string;
