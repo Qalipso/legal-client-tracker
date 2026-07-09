@@ -30,6 +30,14 @@
 - Документы — прототип: сохраняется имя файла (в проде — Supabase Storage / S3)
 - История изменения статусов — видно, где дело зависло
 
+**Telegram-уведомления**
+- При добавлении клиента фронт вызывает Supabase Edge Function
+  `notify-telegram` (fire-and-forget — UI не блокируется и не ломается)
+- Токен бота хранится только в секретах Supabase, во фронтенд не попадает
+- Настройка: `supabase secrets set TG_BOT_TOKEN=<token> TG_CHAT_ID=<chat_id>`
+  (или Dashboard → Edge Functions → Secrets); без секретов функция отвечает
+  `{"sent": false}` и приложение работает как обычно
+
 **Base**
 - Add client with inline validation, toast notifications
 - **Редактирование клиента**: имя, телефон, email, telegram, тип дела,
@@ -114,15 +122,28 @@ Attachment      { id, clientId, fileName, uploadedAt }
   the MVP doesn't need.
 - **Search matches status labels too** — "в работе" in the search box works as users expect.
 
+## Next steps
+
+- **Email reminders** — письма по просроченным задачам и дедлайнам
+  (Supabase cron + Resend/Postmark)
+- **Google Calendar integration** — задачи с датой синхронизируются
+  в календарь юриста
+- **Real file upload** — Supabase Storage вместо name-only заглушки:
+  загрузка содержимого, `storage_path`, ссылка на скачивание
+- Auth + RLS per-user, роли (admin / lawyer / assistant)
+- Automated tests (unit для repositories, E2E для доски)
+
+## Feedback от реального юриста
+
+_[Заполняется после короткого теста с реальным пользователем: что понятно
+сразу, что мешает, чего не хватает для ежедневной работы.]_
+
 ## Deferred on purpose (out of scope for the time box)
 
-- Drag-and-drop карточек между колонками (статус меняется из панели/таблицы)
 - Хранение содержимого файлов (только имена; в проде — Supabase Storage / S3)
-- Telegram notification on new client (would be a serverless API route + Bot API call)
-- Supabase persistence + auth, ответственный юрист / тип дела
 - Automated tests — the app was verified manually end-to-end in a real browser
-  (add, status change, delete, search, filter, validation, notes, tasks, overdue,
-  reload persistence, v1→v2 migration, mobile layout)
+  (add, status change, delete, drag-and-drop, search, filter, validation, notes,
+  tasks, overdue, reload persistence, migrations, mobile layout)
 
 ## AI Usage
 

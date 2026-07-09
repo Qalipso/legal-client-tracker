@@ -6,6 +6,7 @@ import type {
   NewClientInput,
 } from "./types/client";
 import { getProvider } from "./lib/providers";
+import { notifyNewClient } from "./lib/notify";
 import { STATUS_LABELS } from "./lib/statuses";
 import StatusCards from "./components/StatusCards";
 import ClientForm from "./components/ClientForm";
@@ -72,6 +73,7 @@ export default function App() {
   function handleAdd(input: NewClientInput) {
     setShowForm(false);
     void run(provider.createClient(input), "Клиент добавлен");
+    notifyNewClient(input); // fire-and-forget, never blocks the UI
   }
 
   function handleUpdateClient(id: string, patch: ClientPatch) {
