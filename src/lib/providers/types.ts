@@ -1,14 +1,17 @@
 import type {
+  AccountSettings,
   AppData,
   ClientPatch,
   ClientStatus,
   NewClientInput,
-  NotificationSettings,
+  NotificationEvent,
+  NotificationRecipient,
+  Profile,
 } from "../../types/client";
 
 // The UI never talks to Supabase or localStorage directly — only to this
-// interface. Every mutation also writes its case_history event and returns
-// the fresh AppData snapshot the UI should render.
+// interface. Every data mutation also writes its case_history event and
+// returns the fresh AppData snapshot the UI should render.
 export interface DataProvider {
   readonly name: "supabase" | "localStorage";
   fetchAll(): Promise<AppData>;
@@ -24,6 +27,24 @@ export interface DataProvider {
   ): Promise<AppData>;
   toggleTask(taskId: string): Promise<AppData>;
   addAttachment(clientId: string, fileName: string): Promise<AppData>;
-  getSettings(): Promise<NotificationSettings>;
-  saveSettings(settings: NotificationSettings): Promise<NotificationSettings>;
+
+  // account: profile, notification settings, recipients, delivery log
+  getProfile(): Promise<Profile>;
+  updateProfile(patch: {
+    fullName?: string;
+    companyName?: string;
+  }): Promise<Profile>;
+  getAccountSettings(): Promise<AccountSettings>;
+  updateAccountSettings(settings: AccountSettings): Promise<AccountSettings>;
+  listRecipients(): Promise<NotificationRecipient[]>;
+  addRecipient(input: {
+    name: string;
+    destination: string;
+  }): Promise<NotificationRecipient[]>;
+  updateRecipient(
+    id: string,
+    patch: { isActive?: boolean },
+  ): Promise<NotificationRecipient[]>;
+  deleteRecipient(id: string): Promise<NotificationRecipient[]>;
+  listNotificationEvents(limit?: number): Promise<NotificationEvent[]>;
 }

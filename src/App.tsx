@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import type {
   AppData,
   ClientPatch,
@@ -6,7 +7,9 @@ import type {
   NewClientInput,
 } from "./types/client";
 import { getProvider } from "./lib/providers";
-import { notifyNewClient } from "./lib/notify";
+import { getSupabase } from "./lib/supabaseClient";
+import { notifyEvent } from "./lib/notify";
+import { isOverdue } from "./lib/clients";
 import { STATUS_LABELS } from "./lib/statuses";
 import StatusCards from "./components/StatusCards";
 import ClientForm from "./components/ClientForm";
@@ -15,7 +18,8 @@ import ClientTable from "./components/ClientTable";
 import BoardView from "./components/BoardView";
 import ClientDetails from "./components/ClientDetails";
 import Toast from "./components/Toast";
-import SettingsPanel from "./components/SettingsPanel";
+import AuthPage from "./components/AuthPage";
+import SettingsPage from "./components/SettingsPage";
 
 type ViewMode = "table" | "board";
 
@@ -28,10 +32,53 @@ const emptyData: AppData = {
   attachments: [],
 };
 
+// Root: demo-mode runs without auth; Supabase mode is gated by a session.
 export default function App() {
-  // lazy init — evaluated exactly once per mount, and getProvider itself
-  // caches at module level, so the Supabase client is a true singleton
+  const sb = getSupabase();
+  if (!sb) return <MainApp />;
+  return <AuthGate />;
+}
+
+function AuthGate() {
+  const sb = getSupabase()!;
+  const [session, setSession] = useState<Session | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setChecking(false);
+    });
+    const { data: sub } = sb.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [sb]);
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <p className="text-sm text-slate-400">Загрузка…</p>
+      </div>
+    );
+  }
+  if (!session) return <AuthPage />;
+  return <MainApp key={session.user.id} />;
+}
+
+function useHashRoute(): [string, (h: string) => void] {
+  const [hash, setHash] = useState(() => window.location.hash);
+  useEffect(() => {
+    const onChange = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  return [hash, (h: string) => (window.location.hash = h)];
+}
+
+function MainApp() {
   const [provider] = useState(getProvider);
+  const [route, navigate] = useHashRoute();
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -44,8 +91,8 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "all">(
     "all",
   );
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     provider
@@ -61,8 +108,6 @@ export default function App() {
 
   const dismissToast = useCallback(() => setToast(null), []);
 
-  // every mutation returns the fresh snapshot; on failure the UI keeps
-  // its previous state and reports the error instead of pretending
   async function run(action: Promise<AppData>, message: string) {
     try {
       setData(await action);
@@ -75,7 +120,11 @@ export default function App() {
   function handleAdd(input: NewClientInput) {
     setShowForm(false);
     void run(provider.createClient(input), "Клиент добавлен");
-    notifyNewClient(input); // fire-and-forget, never blocks the UI
+    notifyEvent("client.created", {
+      name: input.name,
+      phone: input.phone,
+      status: STATUS_LABELS[input.status],
+    });
   }
 
   function handleUpdateClient(id: string, patch: ClientPatch) {
@@ -83,6 +132,14 @@ export default function App() {
   }
 
   function handleStatusChange(id: string, status: ClientStatus) {
+    const client = data.clients.find((c) => c.id === id);
+    if (client && client.status !== status) {
+      notifyEvent("status.changed", {
+        name: client.name,
+        from: STATUS_LABELS[client.status],
+        to: STATUS_LABELS[status],
+      });
+    }
     void run(provider.updateClientStatus(id, status), "Статус обновлён");
   }
 
@@ -99,7 +156,13 @@ export default function App() {
   }
 
   function handleAddTask(clientId: string, title: string, dueDate?: string) {
+    const client = data.clients.find((c) => c.id === clientId);
     void run(provider.createTask(clientId, title, dueDate), "Задача добавлена");
+    notifyEvent("task.created", {
+      name: client?.name ?? "",
+      title,
+      dueDate: dueDate ?? null,
+    });
   }
 
   function handleToggleTask(taskId: string) {
@@ -107,16 +170,27 @@ export default function App() {
   }
 
   function handleAddAttachment(clientId: string, fileName: string) {
-    void run(
-      provider.addAttachment(clientId, fileName),
-      "Документ прикреплён",
-    );
+    void run(provider.addAttachment(clientId, fileName), "Документ прикреплён");
   }
+
+  async function handleLogout() {
+    await getSupabase()?.auth.signOut();
+    navigate("");
+  }
+
+  const overdueClientIds = useMemo(
+    () =>
+      new Set(
+        data.tasks.filter((t) => isOverdue(t)).map((t) => t.clientId),
+      ),
+    [data.tasks],
+  );
 
   const visibleClients = useMemo(() => {
     const query = search.trim().toLowerCase();
     return data.clients.filter((c) => {
       if (statusFilter !== "all" && c.status !== statusFilter) return false;
+      if (overdueOnly && !overdueClientIds.has(c.id)) return false;
       if (!query) return true;
       return (
         c.name.toLowerCase().includes(query) ||
@@ -124,10 +198,21 @@ export default function App() {
         STATUS_LABELS[c.status].toLowerCase().includes(query)
       );
     });
-  }, [data.clients, search, statusFilter]);
+  }, [data.clients, search, statusFilter, overdueOnly, overdueClientIds]);
 
   const selectedClient =
     data.clients.find((c) => c.id === selectedId) ?? null;
+
+  if (route === "#/settings") {
+    return (
+      <SettingsPage
+        provider={provider}
+        onBack={() => navigate("")}
+        onLogout={handleLogout}
+        onToast={setToast}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -144,9 +229,9 @@ export default function App() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setShowSettings(true)}
-              aria-label="Настройки уведомлений"
-              title="Настройки уведомлений"
+              onClick={() => navigate("#/settings")}
+              aria-label="Настройки"
+              title="Настройки"
               className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-600 shadow-sm hover:bg-slate-50"
             >
               ⚙
@@ -173,75 +258,106 @@ export default function App() {
               страницу.
             </p>
           )}
-          {!loading && !loadError && (
-            <>
-              <StatusCards clients={data.clients} />
+          {!loading && !loadError && data.clients.length === 0 && !showForm ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
+              <p className="text-lg font-semibold text-slate-900">
+                Добро пожаловать 👋
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+                Здесь будет ваша доска дел: клиенты по статусам, задачи с
+                дедлайнами и история по каждому делу. Начните с первого клиента.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="mt-4 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                + Добавить первого клиента
+              </button>
+            </div>
+          ) : (
+            !loading &&
+            !loadError && (
+              <>
+                <StatusCards clients={data.clients} />
 
-              {showForm && (
-                <ClientForm
-                  onAdd={handleAdd}
-                  onCancel={() => setShowForm(false)}
-                />
-              )}
+                {showForm && (
+                  <ClientForm
+                    onAdd={handleAdd}
+                    onCancel={() => setShowForm(false)}
+                  />
+                )}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <Filters
-                  search={search}
-                  onSearchChange={setSearch}
-                  statusFilter={statusFilter}
-                  onStatusFilterChange={setStatusFilter}
-                />
-                <div
-                  role="group"
-                  aria-label="Вид"
-                  className="flex shrink-0 rounded-lg border border-slate-300 bg-white p-0.5"
-                >
-                  {(
-                    [
-                      ["board", "Доска"],
-                      ["table", "Таблица"],
-                    ] as const
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setView(mode)}
-                      aria-pressed={view === mode}
-                      className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                        view === mode
-                          ? "bg-slate-900 text-white"
-                          : "text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Filters
+                      search={search}
+                      onSearchChange={setSearch}
+                      statusFilter={statusFilter}
+                      onStatusFilterChange={setStatusFilter}
+                    />
+                    <label className="flex shrink-0 items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={overdueOnly}
+                        onChange={(e) => setOverdueOnly(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      Просроченные задачи
+                    </label>
+                  </div>
+                  <div
+                    role="group"
+                    aria-label="Вид"
+                    className="flex shrink-0 rounded-lg border border-slate-300 bg-white p-0.5"
+                  >
+                    {(
+                      [
+                        ["board", "Доска"],
+                        ["table", "Таблица"],
+                      ] as const
+                    ).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setView(mode)}
+                        aria-pressed={view === mode}
+                        className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                          view === mode
+                            ? "bg-slate-900 text-white"
+                            : "text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {view === "board" ? (
-                <BoardView
-                  clients={visibleClients}
-                  tasks={data.tasks}
-                  onOpenClient={setSelectedId}
-                  onStatusChange={handleStatusChange}
-                />
-              ) : (
-                <ClientTable
-                  clients={visibleClients}
-                  totalCount={data.clients.length}
-                  onStatusChange={handleStatusChange}
-                  onDelete={handleDelete}
-                  onOpenClient={setSelectedId}
-                />
-              )}
-            </>
+                {view === "board" ? (
+                  <BoardView
+                    clients={visibleClients}
+                    tasks={data.tasks}
+                    onOpenClient={setSelectedId}
+                    onStatusChange={handleStatusChange}
+                  />
+                ) : (
+                  <ClientTable
+                    clients={visibleClients}
+                    totalCount={data.clients.length}
+                    onStatusChange={handleStatusChange}
+                    onDelete={handleDelete}
+                    onOpenClient={setSelectedId}
+                  />
+                )}
+              </>
+            )
           )}
         </main>
 
         <footer className="mt-8 text-center text-xs text-slate-400">
           {provider.name === "supabase"
-            ? "Данные хранятся в Supabase (PostgreSQL)."
+            ? "Данные хранятся в Supabase (PostgreSQL), доступ только к вашим записям."
             : "Demo-режим: данные хранятся локально в вашем браузере (localStorage)."}
         </footer>
       </div>
@@ -260,14 +376,6 @@ export default function App() {
           onAddTask={handleAddTask}
           onToggleTask={handleToggleTask}
           onAddAttachment={handleAddAttachment}
-        />
-      )}
-
-      {showSettings && (
-        <SettingsPanel
-          provider={provider}
-          onClose={() => setShowSettings(false)}
-          onSaved={() => setToast("Настройки сохранены")}
         />
       )}
 

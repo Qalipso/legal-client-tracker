@@ -6,7 +6,9 @@ import type {
   ClientStatus,
   HistoryType,
   NewClientInput,
-  NotificationSettings,
+  NotificationEvent,
+  NotificationRecipient,
+  Profile,
 } from "../../types/client";
 import type { DataProvider } from "./types";
 import { STATUS_LABELS } from "../statuses";
@@ -211,6 +213,23 @@ function historyItem(
   };
 }
 
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // private mode — value lives for the session only
+  }
+}
+
 function mutate(fn: (data: AppData) => AppData): Promise<AppData> {
   const next = fn(load());
   save(next);
@@ -349,24 +368,82 @@ export const localStorageProvider: DataProvider = {
       };
     }).then(visible),
 
-  getSettings: () => {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) return Promise.resolve(JSON.parse(raw));
-    } catch {
-      // fall through to defaults
-    }
-    return Promise.resolve({ notifyOnNewClient: true });
+  // demo-mode account: everything lives in localStorage, no auth
+  getProfile: () =>
+    Promise.resolve({
+      id: "demo",
+      email: "demo@local",
+      ...readJson<Partial<Profile>>(`${SETTINGS_KEY}:profile`, {}),
+    } as Profile),
+
+  updateProfile(patch) {
+    writeJson(`${SETTINGS_KEY}:profile`, patch);
+    return this.getProfile();
   },
 
-  saveSettings: (settings: NotificationSettings) => {
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch {
-      // private mode — settings live for the session only
-    }
+  getAccountSettings: () =>
+    Promise.resolve(
+      readJson(`${SETTINGS_KEY}:account`, {
+        telegramEnabled: true,
+        notifyOnClientCreated: true,
+        notifyOnTaskOverdue: true,
+        notifyOnStatusChanged: false,
+      }),
+    ),
+
+  updateAccountSettings: (settings) => {
+    writeJson(`${SETTINGS_KEY}:account`, settings);
     return Promise.resolve(settings);
   },
+
+  listRecipients: () =>
+    Promise.resolve(
+      readJson<NotificationRecipient[]>(`${SETTINGS_KEY}:recipients`, []),
+    ),
+
+  addRecipient(input) {
+    const list = readJson<NotificationRecipient[]>(
+      `${SETTINGS_KEY}:recipients`,
+      [],
+    );
+    list.push({
+      id: crypto.randomUUID(),
+      name: input.name.trim(),
+      channel: "telegram",
+      destination: input.destination.trim(),
+      isActive: true,
+    });
+    writeJson(`${SETTINGS_KEY}:recipients`, list);
+    return Promise.resolve(list);
+  },
+
+  updateRecipient(id, patch) {
+    const list = readJson<NotificationRecipient[]>(
+      `${SETTINGS_KEY}:recipients`,
+      [],
+    ).map((r) =>
+      r.id === id ? { ...r, ...(patch.isActive !== undefined && { isActive: patch.isActive }) } : r,
+    );
+    writeJson(`${SETTINGS_KEY}:recipients`, list);
+    return Promise.resolve(list);
+  },
+
+  deleteRecipient(id) {
+    const list = readJson<NotificationRecipient[]>(
+      `${SETTINGS_KEY}:recipients`,
+      [],
+    ).filter((r) => r.id !== id);
+    writeJson(`${SETTINGS_KEY}:recipients`, list);
+    return Promise.resolve(list);
+  },
+
+  listNotificationEvents: (limit = 20) =>
+    Promise.resolve(
+      readJson<NotificationEvent[]>(`${SETTINGS_KEY}:events`, []).slice(
+        0,
+        limit,
+      ),
+    ),
 
   addAttachment: (clientId: string, fileName: string) =>
     mutate((data) => ({

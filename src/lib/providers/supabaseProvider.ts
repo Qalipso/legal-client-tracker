@@ -1,5 +1,6 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  AccountSettings,
   AppData,
   Attachment,
   CaseHistoryItem,
@@ -8,7 +9,9 @@ import type {
   ClientStatus,
   HistoryType,
   NewClientInput,
-  NotificationSettings,
+  NotificationEvent,
+  NotificationRecipient,
+  Profile,
   Task,
 } from "../../types/client";
 import type { DataProvider } from "./types";
@@ -60,15 +63,26 @@ const mapAttachment = (r: Row): Attachment => ({
   uploadedAt: r.created_at,
 });
 
-export function createSupabaseProvider(
-  url: string,
-  anonKey: string,
-): DataProvider {
-  // no auth in the MVP — disable session persistence so GoTrueClient
-  // doesn't claim a storage key it never uses
-  const sb = createSupabaseClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+const mapRecipient = (r: Row): NotificationRecipient => ({
+  id: r.id,
+  name: r.name,
+  channel: r.channel,
+  destination: r.destination,
+  isActive: r.is_active,
+});
+
+const mapEvent = (r: Row): NotificationEvent => ({
+  id: r.id,
+  eventType: r.event_type,
+  recipientId: r.recipient_id ?? undefined,
+  channel: r.channel ?? undefined,
+  status: r.status,
+  error: r.error ?? undefined,
+  createdAt: r.created_at,
+  sentAt: r.sent_at ?? undefined,
+});
+
+export function createSupabaseProvider(sb: SupabaseClient): DataProvider {
 
   async function fetchAll(): Promise<AppData> {
     const [clients, history, tasks, attachments] = await Promise.all([
@@ -231,28 +245,115 @@ export function createSupabaseProvider(
       return fetchAll();
     },
 
-    async getSettings(): Promise<NotificationSettings> {
+    async getProfile(): Promise<Profile> {
+      const { data: auth } = await sb.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("not authenticated");
       const { data, error } = await sb
-        .from("settings")
-        .select("telegram_chat_id, notify_on_new_client")
-        .eq("id", 1)
+        .from("profiles")
+        .select("*")
+        .eq("id", uid)
         .maybeSingle();
       if (error) throw error;
       return {
-        telegramChatId: data?.telegram_chat_id ?? undefined,
-        notifyOnNewClient: data?.notify_on_new_client ?? true,
+        id: uid,
+        email: data?.email ?? auth.user?.email ?? "",
+        fullName: data?.full_name ?? undefined,
+        companyName: data?.company_name ?? undefined,
       };
     },
 
-    async saveSettings(settings: NotificationSettings) {
-      const { error } = await sb.from("settings").upsert({
-        id: 1,
-        telegram_chat_id: settings.telegramChatId?.trim() || null,
-        notify_on_new_client: settings.notifyOnNewClient,
+    async updateProfile(patch) {
+      const { data: auth } = await sb.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("not authenticated");
+      const { error } = await sb
+        .from("profiles")
+        .update({
+          full_name: patch.fullName?.trim() || null,
+          company_name: patch.companyName?.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", uid);
+      if (error) throw error;
+      return this.getProfile();
+    },
+
+    async getAccountSettings(): Promise<AccountSettings> {
+      const { data, error } = await sb
+        .from("account_settings")
+        .select("*")
+        .maybeSingle();
+      if (error) throw error;
+      return {
+        telegramEnabled: data?.telegram_enabled ?? true,
+        notifyOnClientCreated: data?.notify_on_client_created ?? true,
+        notifyOnTaskOverdue: data?.notify_on_task_overdue ?? true,
+        notifyOnStatusChanged: data?.notify_on_status_changed ?? false,
+      };
+    },
+
+    async updateAccountSettings(settings: AccountSettings) {
+      const { data: auth } = await sb.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) throw new Error("not authenticated");
+      const { error } = await sb.from("account_settings").upsert({
+        user_id: uid,
+        telegram_enabled: settings.telegramEnabled,
+        notify_on_client_created: settings.notifyOnClientCreated,
+        notify_on_task_overdue: settings.notifyOnTaskOverdue,
+        notify_on_status_changed: settings.notifyOnStatusChanged,
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
       return settings;
+    },
+
+    async listRecipients() {
+      const { data, error } = await sb
+        .from("notification_recipients")
+        .select("*")
+        .order("created_at");
+      if (error) throw error;
+      return (data ?? []).map(mapRecipient);
+    },
+
+    async addRecipient(input) {
+      const { error } = await sb.from("notification_recipients").insert({
+        name: input.name.trim(),
+        destination: input.destination.trim(),
+        channel: "telegram",
+      });
+      if (error) throw error;
+      return this.listRecipients();
+    },
+
+    async updateRecipient(id, patch) {
+      const { error } = await sb
+        .from("notification_recipients")
+        .update({ ...(patch.isActive !== undefined && { is_active: patch.isActive }) })
+        .eq("id", id);
+      if (error) throw error;
+      return this.listRecipients();
+    },
+
+    async deleteRecipient(id) {
+      const { error } = await sb
+        .from("notification_recipients")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      return this.listRecipients();
+    },
+
+    async listNotificationEvents(limit = 20) {
+      const { data, error } = await sb
+        .from("notification_events")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data ?? []).map(mapEvent);
     },
 
     async addAttachment(clientId: string, fileName: string) {

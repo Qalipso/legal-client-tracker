@@ -1,55 +1,67 @@
-import type { Client } from "../types/client";
-import { STATUS_LABELS } from "./statuses";
+import { getSupabase } from "./supabaseClient";
 
-type NotifyResult = { sent: boolean; reason?: string; description?: string };
+export type NotifyEventType =
+  | "client.created"
+  | "task.created"
+  | "task.overdue"
+  | "status.changed"
+  | "test";
 
-function endpoint(): { url: string; anonKey: string } | null {
-  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-  return url && anonKey ? { url, anonKey } : null;
-}
+export type NotifyResult = {
+  sent?: boolean;
+  skipped?: boolean;
+  reason?: string;
+  delivered?: number;
+  failed?: number;
+};
 
-async function callFunction(body: unknown): Promise<NotifyResult> {
-  const env = endpoint();
-  if (!env) {
-    return { sent: false, reason: "demo-режим (Supabase не настроен)" };
-  }
-  const res = await fetch(`${env.url}/functions/v1/notify-telegram`, {
+async function callFunction(
+  eventType: NotifyEventType,
+  payload: Record<string, unknown>,
+): Promise<NotifyResult> {
+  const sb = getSupabase();
+  if (!sb) return { skipped: true, reason: "demo-режим (Supabase не настроен)" };
+  const { data } = await sb.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { skipped: true, reason: "нет активной сессии" };
+
+  const url = import.meta.env.VITE_SUPABASE_URL as string;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  const res = await fetch(`${url}/functions/v1/notify-telegram`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${env.anonKey}`,
-      apikey: env.anonKey,
+      // JWT пользователя — функция определяет auth.uid() из него
+      Authorization: `Bearer ${token}`,
+      apikey: anonKey,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ event_type: eventType, payload }),
   });
-  return (await res.json().catch(() => null)) ?? {
-    sent: false,
-    reason: `HTTP ${res.status}`,
-  };
+  return (
+    (await res.json().catch(() => null)) ?? {
+      skipped: true,
+      reason: `HTTP ${res.status}`,
+    }
+  );
 }
 
-// Fire-and-forget Telegram notification via the Supabase Edge Function.
-// Never blocks or breaks the add-client flow.
-export function notifyNewClient(
-  client: Pick<Client, "name" | "phone" | "status">,
+// Fire-and-forget — never blocks or breaks the main flow.
+export function notifyEvent(
+  eventType: NotifyEventType,
+  payload: Record<string, unknown>,
 ): void {
-  void callFunction({
-    name: client.name,
-    phone: client.phone,
-    status: STATUS_LABELS[client.status],
-  })
+  void callFunction(eventType, payload)
     .then((r) => {
-      if (!r.sent) console.info("[notify-telegram] not sent:", r.reason);
+      if (!r.sent) console.info(`[notify:${eventType}]`, r.reason ?? r);
     })
-    .catch((e) => console.info("[notify-telegram] failed:", e));
+    .catch((e) => console.info(`[notify:${eventType}] failed:`, e));
 }
 
-// Explicit test from the settings panel — returns the outcome for the UI.
+// Explicit test from the settings page — returns the outcome for the UI.
 export async function sendTestNotification(): Promise<NotifyResult> {
   try {
-    return await callFunction({ test: true, name: "test" });
+    return await callFunction("test", {});
   } catch (e) {
-    return { sent: false, reason: String(e) };
+    return { skipped: true, reason: String(e) };
   }
 }

@@ -78,9 +78,37 @@ export type AppData = {
   attachments: Attachment[];
 };
 
-export type NotificationSettings = {
-  telegramChatId?: string;
-  notifyOnNewClient: boolean;
+export type Profile = {
+  id: string;
+  email: string;
+  fullName?: string;
+  companyName?: string;
+};
+
+export type AccountSettings = {
+  telegramEnabled: boolean;
+  notifyOnClientCreated: boolean;
+  notifyOnTaskOverdue: boolean;
+  notifyOnStatusChanged: boolean;
+};
+
+export type NotificationRecipient = {
+  id: string;
+  name: string;
+  channel: "telegram";
+  destination: string; // telegram chat_id
+  isActive: boolean;
+};
+
+export type NotificationEvent = {
+  id: string;
+  eventType: string;
+  recipientId?: string;
+  channel?: string;
+  status: "sent" | "error" | "skipped";
+  error?: string;
+  createdAt: string;
+  sentAt?: string;
 };
 
 export type NewClientInput = {

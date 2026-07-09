@@ -30,17 +30,34 @@
 - Документы — прототип: сохраняется имя файла (в проде — Supabase Storage / S3)
 - История изменения статусов — видно, где дело зависло
 
-**Telegram-уведомления (настраиваются из UI)**
-- Кнопка ⚙ в шапке → «Уведомления в Telegram»: получатель (chat ID),
-  вкл/выкл уведомлений о новых клиентах, кнопка «Отправить тест»
-- Получатель хранится в БД (таблица `settings`); при добавлении клиента фронт
-  вызывает Supabase Edge Function `notify-telegram` (fire-and-forget — UI не
-  блокируется и не ломается), функция резолвит получателя server-side
-- Токен бота хранится только в секретах Supabase, во фронтенд не попадает
-- Настройка: создать бота у @BotFather → `supabase secrets set TG_BOT_TOKEN=<token>`
-  (или Dashboard → Edge Functions → Secrets) → в приложении задать свой chat ID
-  (узнать: @userinfobot) → «Отправить тест». Без токена/получателя функция
-  отвечает `{"sent": false, "reason": ...}` и приложение работает как обычно
+**Auth и приватность данных (v0.3)**
+- Supabase Auth: регистрация, вход, выход; без сессии приложение показывает
+  страницу входа
+- Все данные принадлежат пользователю: `user_id` на clients / tasks /
+  case_history / attachments + RLS-политики «только свои строки»
+- При регистрации триггер автоматически создаёт `profiles` и
+  `account_settings` с дефолтами
+- Новый пользователь видит welcome empty state, а не чужие данные
+
+**Настройки аккаунта (`#/settings`)**
+- Профиль: имя, компания, email (readonly), выход
+- Уведомления: Telegram вкл/выкл + тумблеры по событиям (новый клиент,
+  просроченная задача, смена статуса)
+- Получатели: список Telegram chat ID (имя + chat_id + активность),
+  добавление/отключение/удаление, «Send test notification»
+- История уведомлений: последние попытки с статусами sent / error / skipped
+
+**Telegram-уведомления (per-user routing)**
+- События: `client.created`, `task.created`, `status.changed` отправляются
+  fire-and-forget из UI; `task.overdue` поддержан схемой/настройками
+  (автоотправка по расписанию — next step)
+- Edge Function получает JWT пользователя → определяет auth.uid() → читает
+  его настройки и активных получателей → шлёт всем → пишет каждую попытку
+  в `notification_events` (status, error, payload, sent_at)
+- Токен бота только в секретах Supabase (`TG_BOT_TOKEN`); нет получателей
+  или токена → `{"skipped": true, "reason": ...}`, UI не ломается
+- Настройка: @BotFather → токен в секреты → в `#/settings` добавить свой
+  chat ID (узнать: @userinfobot) → «Send test notification»
 
 **Base**
 - Add client with inline validation, toast notifications

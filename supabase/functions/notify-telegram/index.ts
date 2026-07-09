@@ -1,8 +1,9 @@
-// Telegram notification on new client.
-// The bot token lives ONLY here (Supabase secrets), never in the frontend.
-// The recipient chat ID is configured from the app UI (settings table);
-// TG_CHAT_ID env works as a fallback.
-// Configure the bot: supabase secrets set TG_BOT_TOKEN=...
+// Telegram notification routing (v3, per-user).
+// - Bot token lives ONLY in Supabase secrets (TG_BOT_TOKEN)
+// - Caller must send the USER's JWT; the function resolves auth.uid() from it
+// - Recipients + event toggles come from the user's account settings
+// - Every attempt is logged to notification_events
+// If Telegram is not configured or there are no recipients → {skipped:true}.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -16,86 +17,153 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS, "Content-Type": "application/json" },
   });
 
-async function loadSettings(): Promise<{
-  chatId: string | null;
-  enabled: boolean;
-}> {
-  // SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected automatically
-  const url = Deno.env.get("SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (url && key) {
-    try {
-      const res = await fetch(
-        `${url}/rest/v1/settings?id=eq.1&select=telegram_chat_id,notify_on_new_client`,
-        { headers: { apikey: key, Authorization: `Bearer ${key}` } },
-      );
-      const rows = await res.json();
-      if (Array.isArray(rows) && rows[0]) {
-        return {
-          chatId: rows[0].telegram_chat_id ?? null,
-          enabled: rows[0].notify_on_new_client ?? true,
-        };
-      }
-    } catch {
-      // fall through to env fallback
-    }
+const SB_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+const svcHeaders = {
+  apikey: SERVICE_KEY,
+  Authorization: `Bearer ${SERVICE_KEY}`,
+  "Content-Type": "application/json",
+};
+
+async function getUserId(req: Request): Promise<string | null> {
+  const auth = req.headers.get("Authorization") ?? "";
+  const token = auth.replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const res = await fetch(`${SB_URL}/auth/v1/user`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const user = await res.json().catch(() => null);
+  return user?.id ?? null;
+}
+
+async function select(path: string): Promise<any[]> {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: svcHeaders });
+  const rows = await res.json().catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function logEvent(row: Record<string, unknown>): Promise<void> {
+  await fetch(`${SB_URL}/rest/v1/notification_events`, {
+    method: "POST",
+    headers: svcHeaders,
+    body: JSON.stringify(row),
+  }).catch(() => {});
+}
+
+const EVENT_TOGGLES: Record<string, string> = {
+  "client.created": "notify_on_client_created",
+  "task.created": "notify_on_client_created", // MVP: same switch as new client
+  "task.overdue": "notify_on_task_overdue",
+  "status.changed": "notify_on_status_changed",
+};
+
+function buildText(eventType: string, p: Record<string, unknown>): string {
+  switch (eventType) {
+    case "test":
+      return "✅ Тестовое уведомление от Legal Client Tracker";
+    case "client.created":
+      return [
+        "Новый клиент добавлен:",
+        p.name,
+        p.phone ? `Телефон: ${p.phone}` : null,
+        p.status ? `Статус: ${p.status}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    case "status.changed":
+      return `Статус дела изменён:\n${p.name}\n${p.from} → ${p.to}`;
+    case "task.created":
+      return [
+        "Новая задача:",
+        `${p.title} — ${p.name}`,
+        p.dueDate ? `Срок: ${p.dueDate}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    case "task.overdue":
+      return `⚠️ Просроченная задача:\n${p.title} — ${p.name}\nСрок: ${p.dueDate}`;
+    default:
+      return `Событие: ${eventType}`;
   }
-  return { chatId: null, enabled: true };
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
-  let payload: {
-    name?: string;
-    phone?: string;
-    status?: string;
-    test?: boolean;
-  };
+  let body: { event_type?: string; payload?: Record<string, unknown> };
   try {
-    payload = await req.json();
+    body = await req.json();
   } catch {
     return json({ error: "invalid JSON" }, 400);
   }
-  if (!payload.name) return json({ error: "name is required" }, 400);
+  const eventType = body.event_type ?? "test";
+  const payload = body.payload ?? {};
 
-  const settings = await loadSettings();
-  const chatId = settings.chatId || Deno.env.get("TG_CHAT_ID") || null;
+  const userId = await getUserId(req);
+  if (!userId) return json({ error: "unauthorized" }, 401);
+
+  const skip = async (reason: string) => {
+    await logEvent({
+      user_id: userId,
+      event_type: eventType,
+      channel: "telegram",
+      status: "skipped",
+      error: reason,
+      payload,
+    });
+    return json({ skipped: true, reason });
+  };
+
+  // user's notification settings
+  const settingsRows = await select(
+    `account_settings?user_id=eq.${userId}&select=*`,
+  );
+  const settings = settingsRows[0] ?? {};
+  if (settings.telegram_enabled === false && eventType !== "test") {
+    return skip("Telegram-уведомления выключены в настройках");
+  }
+  const toggleColumn = EVENT_TOGGLES[eventType];
+  if (toggleColumn && settings[toggleColumn] === false) {
+    return skip(`событие «${eventType}» выключено в настройках`);
+  }
+
   const token = Deno.env.get("TG_BOT_TOKEN");
+  if (!token) return skip("TG_BOT_TOKEN не задан в секретах Supabase");
 
-  // an explicit test from the settings panel ignores the enabled toggle
-  if (!payload.test && !settings.enabled) {
-    return json({ sent: false, reason: "уведомления выключены в настройках" });
-  }
-  if (!token) {
-    return json({ sent: false, reason: "TG_BOT_TOKEN не задан в секретах Supabase" });
-  }
-  if (!chatId) {
-    return json({ sent: false, reason: "chat ID получателя не задан в настройках" });
+  const recipients = await select(
+    `notification_recipients?user_id=eq.${userId}&is_active=eq.true&channel=eq.telegram&select=id,destination`,
+  );
+  if (recipients.length === 0) {
+    return skip("нет активных получателей — добавьте chat ID в настройках");
   }
 
-  const text = payload.test
-    ? "✅ Тестовое уведомление от Legal Client Tracker"
-    : [
-        "Новый клиент добавлен:",
-        payload.name,
-        payload.phone ? `Телефон: ${payload.phone}` : null,
-        payload.status ? `Статус: ${payload.status}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
+  const text = buildText(eventType, payload);
+  let delivered = 0;
+  let failed = 0;
 
-  const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
-  });
-  const tgBody = await tg.json().catch(() => null);
+  for (const r of recipients) {
+    const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: r.destination, text }),
+    }).catch(() => null);
+    const tgBody = await tg?.json().catch(() => null);
+    const ok = Boolean(tg?.ok && tgBody?.ok);
+    ok ? delivered++ : failed++;
+    await logEvent({
+      user_id: userId,
+      event_type: eventType,
+      recipient_id: r.id,
+      channel: "telegram",
+      status: ok ? "sent" : "error",
+      error: ok ? null : (tgBody?.description ?? `HTTP ${tg?.status ?? "network"}`),
+      payload,
+      sent_at: ok ? new Date().toISOString() : null,
+    });
+  }
 
-  return json({
-    sent: tg.ok && tgBody?.ok === true,
-    status: tg.status,
-    description: tgBody?.description,
-  });
+  return json({ sent: delivered > 0, delivered, failed });
 });
