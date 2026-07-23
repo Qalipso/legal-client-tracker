@@ -85,6 +85,30 @@ Anon key — публичный (данные защищает RLS). `.env*` в 
 Все попытки отправки видны в Настройки → История уведомлений
 (sent / error / skipped с причиной).
 
+## 3.5. Аналитика (activation/retention)
+
+Миграция `013_analytics_views.sql` добавляет три read-only view поверх уже
+существующих таблиц (`profiles`, `clients`, `case_history`) — никакого
+отдельного event-трекинга на клиенте, `case_history` уже логирует каждое
+осмысленное действие пользователя.
+
+- `user_activation` — дата регистрации, дата первого созданного клиента,
+  `activated_within_3d` (создал ли клиента в первые 3 дня — это и есть
+  «aha moment» продукта: пустой трекер никому не нужен).
+- `user_weekly_activity` — активные дни по неделям (ISO-неделя) на основе
+  `case_history`.
+- `user_retention_summary` — доля недель с активностью от недель с момента
+  регистрации, per user.
+
+Только владелец: view'ам явно `revoke`-нут доступ у `anon`/`authenticated`,
+запрос — из Supabase Dashboard → SQL Editor (работает под `service_role`,
+RLS не применяется):
+
+```sql
+select email, activated_within_3d, clients_created from user_activation order by signed_up_at;
+select email, weeks_since_signup, weeks_active, retention_ratio from user_retention_summary order by signed_up_at;
+```
+
 ## 4. Deploy на Vercel
 
 1. [vercel.com/new](https://vercel.com/new) → Import репозитория
