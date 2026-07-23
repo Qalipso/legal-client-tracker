@@ -59,6 +59,19 @@ Dashboard → Authentication → Add user, автоподтверждён).
 > and encrypted secrets (уже есть: server-side Edge Function secrets) —
 > подробности: [docs/security.md](docs/security.md).
 
+## Тестируете по приглашению?
+
+Спасибо! Две просьбы:
+
+1. **Пользуйтесь как обычным инструментом** — заводите дела, двигайте статусы,
+   пробуйте на телефоне. Ломается именно на настоящих сценариях.
+2. **Всё, что удивило, помешало или сломалось** — в
+   [issues](https://github.com/Qalipso/legal-client-tracker/issues/new/choose):
+   там две простые формы («что-то не работает» / «идея»), техничность не нужна,
+   скриншот можно просто перетащить в поле. GitHub непривычен — пишите письмом,
+   задачу заведу сам. Каждый отклик попадает в
+   [журнал фидбека](docs/feedback-log.md) с ответом, что сделано.
+
 ## Документация
 
 - [docs/architecture.md](docs/architecture.md) — компоненты, data model, потоки, решения (ADR) и trade-offs

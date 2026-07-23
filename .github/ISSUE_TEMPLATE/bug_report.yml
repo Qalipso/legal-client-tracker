@@ -1,0 +1,38 @@
+name: "🐞 Что-то не работает"
+description: "Сломалось, зависло, показало ошибку — опишите своими словами"
+labels: ["bug", "user-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что помогаете сделать трекер лучше! Пишите как удобно —
+        техничность не нужна, важны детали «что делал и что увидел».
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Что случилось?
+      description: Что вы делали и что пошло не так
+      placeholder: "Открыла карточку клиента, нажала «Сменить статус» — и ничего не произошло"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: А что должно было произойти?
+      placeholder: "Статус дела должен был поменяться на «Ждём клиента»"
+    validations:
+      required: false
+  - type: input
+    id: device
+    attributes:
+      label: С чего заходили?
+      placeholder: "iPhone / ноутбук + Chrome / планшет"
+    validations:
+      required: false
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Скриншот (если есть)
+      description: Можно просто перетащить картинку в это поле
+    validations:
+      required: false

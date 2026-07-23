@@ -1,0 +1,22 @@
+name: "💬 Идея или неудобство"
+description: "Чего не хватает, что раздражает, что было бы удобнее"
+labels: ["user-feedback"]
+body:
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Расскажите
+      description: Любой формат — «бесит, что…», «хочу, чтобы…», «непонятно, зачем…»
+      placeholder: "Хочу видеть, у каких дел дедлайн на этой неделе, прямо на доске"
+    validations:
+      required: true
+  - type: dropdown
+    id: importance
+    attributes:
+      label: Насколько это вам мешает?
+      options:
+        - "Мелочь, но было бы приятно"
+        - "Заметно мешает работать"
+        - "Без этого пользоваться не буду"
+    validations:
+      required: false
